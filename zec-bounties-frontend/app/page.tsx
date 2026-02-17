@@ -8,7 +8,7 @@ export default function HomePage() {
 
   useEffect(() => {
     // Always redirect to marketplace (which is now public)
-    router.push("/marketplace");
+    router.push("/home");
   }, [router]);
 
   return (
