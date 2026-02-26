@@ -110,7 +110,7 @@ export default function MarketplacePage() {
   // Handler for actions that require authentication
   const handleNewBounty = () => {
     if (!currentUser) {
-      router.push("/login?redirect=/marketplace");
+      router.push("/login?redirect=/home");
       return;
     }
     setIsNewBountyModalOpen(true);
@@ -160,7 +160,7 @@ export default function MarketplacePage() {
               <Button
                 variant="outline"
                 className="rounded-full bg-transparent"
-                onClick={() => router.push("/login?redirect=/marketplace")}
+                onClick={() => router.push("/login?redirect=/home")}
               >
                 Sign In <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -222,7 +222,7 @@ export default function MarketplacePage() {
                   variant="outline"
                   size="sm"
                   className="w-full text-xs bg-transparent"
-                  onClick={() => router.push("/login?redirect=/marketplace")}
+                  onClick={() => router.push("/login?redirect=/home")}
                 >
                   Sign In
                 </Button>
