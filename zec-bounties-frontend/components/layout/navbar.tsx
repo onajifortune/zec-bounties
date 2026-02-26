@@ -11,6 +11,7 @@ import {
   Wallet,
   Menu,
   X,
+  LogIn,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -33,6 +34,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { WalletTopupModal } from "@/components/wallet-topup-modal";
 import { useBounty } from "@/lib/bounty-context";
+import { useRouter } from "next/navigation";
 
 export function Navbar({
   isAdmin = false,
@@ -44,6 +46,7 @@ export function Navbar({
   onSearchChange?: (value: string) => void;
 }) {
   const { theme, setTheme } = useTheme();
+  const router = useRouter();
   const [topupOpen, setTopupOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [zecBalance] = useState(0.0);
@@ -64,37 +67,33 @@ export function Navbar({
             </div>
           </Link>
 
-          {/* Desktop Navigation */}
-          <div className="hidden lg:flex items-center space-x-4 text-sm font-medium mr-auto">
-            {!isAdmin && (
+          {/* Desktop Navigation - Only show if logged in */}
+          {currentUser && (
+            <div className="hidden lg:flex items-center space-x-4 text-sm font-medium mr-auto">
+              {!isAdmin && (
+                <Link
+                  href="/dashboard"
+                  className="transition-colors hover:text-primary"
+                >
+                  Dashboard
+                </Link>
+              )}
               <Link
-                href="/dashboard"
+                href="/my-bounties"
                 className="transition-colors hover:text-primary"
               >
-                Dashboard
+                My Bounties
               </Link>
-            )}
-            <Link
-              href="/my-bounties"
-              className="transition-colors hover:text-primary"
-            >
-              My Bounties
-            </Link>
-            {/* <Link
-              href="/leaderboard"
-              className="transition-colors hover:text-primary"
-            >
-              Leaderboard
-            </Link> */}
-            {isAdmin && (
-              <Link
-                href="/admin"
-                className="transition-colors text-primary font-bold"
-              >
-                Admin Console
-              </Link>
-            )}
-          </div>
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  className="transition-colors text-primary font-bold"
+                >
+                  Admin Console
+                </Link>
+              )}
+            </div>
+          )}
 
           {/* Desktop Right Side */}
           <div className="hidden lg:flex items-center gap-3 ml-auto">
@@ -109,7 +108,7 @@ export function Navbar({
               />
             </div>
 
-            {isAdmin && (
+            {isAdmin && currentUser && (
               <Button
                 variant="ghost"
                 className="gap-2 h-9 text-xs font-mono"
@@ -131,39 +130,53 @@ export function Navbar({
               <span className="sr-only">Toggle theme</span>
             </Button>
 
-            <Button variant="ghost" size="icon" className="h-9 w-9">
-              <Bell className="h-4 w-4" />
-            </Button>
+            {currentUser && (
+              <Button variant="ghost" size="icon" className="h-9 w-9">
+                <Bell className="h-4 w-4" />
+              </Button>
+            )}
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="relative h-8 w-8 rounded-full"
-                >
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage
-                      src={
-                        currentUser?.avatar || "/abstract-geometric-shapes.png"
-                      }
-                      alt="User"
-                    />
-                    <AvatarFallback>JD</AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>{currentUser?.name}</DropdownMenuLabel>
-                {/* <DropdownMenuSeparator />
-                <DropdownMenuItem>Profile</DropdownMenuItem>
-                <DropdownMenuItem>Billing</DropdownMenuItem>
-                <DropdownMenuItem>Team</DropdownMenuItem>
-                <DropdownMenuSeparator /> */}
-                <DropdownMenuItem asChild>
-                  <div onClick={logout}>Log out</div>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* ⭐ Show Login button if not logged in */}
+            {!currentUser ? (
+              <Button
+                onClick={() => router.push("/login")}
+                className="gap-2 h-9 px-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg shadow-primary/20"
+              >
+                <LogIn className="h-4 w-4" />
+                Sign In
+              </Button>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="relative h-8 w-8 rounded-full"
+                  >
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage
+                        src={
+                          currentUser?.avatar ||
+                          "/abstract-geometric-shapes.png"
+                        }
+                        alt="User"
+                      />
+                      <AvatarFallback>
+                        {currentUser?.name?.charAt(0).toUpperCase() || "U"}
+                      </AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>{currentUser?.name}</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <div onClick={logout} className="cursor-pointer">
+                      Log out
+                    </div>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
 
           {/* Mobile Right Side */}
@@ -203,126 +216,126 @@ export function Navbar({
                     />
                   </div>
 
-                  {/* Mobile Navigation Links */}
-                  <div className="flex flex-col gap-2">
-                    {!isAdmin && (
-                      <Link
-                        href="/dashboard"
-                        className="px-3 py-2 text-sm font-medium rounded-md hover:bg-accent transition-colors"
-                        onClick={() => setMobileMenuOpen(false)}
+                  {/* ⭐ Mobile Login Button - Show if not logged in */}
+                  {!currentUser && (
+                    <>
+                      <Button
+                        onClick={() => {
+                          router.push("/login");
+                          setMobileMenuOpen(false);
+                        }}
+                        className="gap-2 w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg shadow-primary/20"
                       >
-                        Dashboard
-                      </Link>
-                    )}
-                    <Link
-                      href="/my-bounties"
-                      className="px-3 py-2 text-sm font-medium rounded-md hover:bg-accent transition-colors"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      My Bounties
-                    </Link>
-                    {/* <Link
-                      href="/leaderboard"
-                      className="px-3 py-2 text-sm font-medium rounded-md hover:bg-accent transition-colors"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Leaderboard
-                    </Link> */}
-                    {isAdmin && (
-                      <Link
-                        href="/admin"
-                        className="px-3 py-2 text-sm font-bold text-primary rounded-md hover:bg-accent transition-colors"
-                        onClick={() => setMobileMenuOpen(false)}
-                      >
-                        Admin Console
-                      </Link>
-                    )}
-                  </div>
-
-                  {/* Divider */}
-                  <div className="border-t" />
-
-                  {/* Mobile Wallet (Admin only) */}
-                  {isAdmin && (
-                    <Button
-                      variant="outline"
-                      className="gap-2 justify-start font-mono"
-                      onClick={() => {
-                        setTopupOpen(true);
-                        setMobileMenuOpen(false);
-                      }}
-                    >
-                      <Wallet className="h-4 w-4" />
-                      {zecBalance.toFixed(4)} ZEC
-                    </Button>
+                        <LogIn className="h-4 w-4" />
+                        Sign In
+                      </Button>
+                      <div className="border-t" />
+                    </>
                   )}
 
-                  {/* Mobile Notifications */}
-                  <Button variant="outline" className="gap-2 justify-start">
-                    <Bell className="h-4 w-4" />
-                    Notifications
-                  </Button>
+                  {/* Mobile Navigation Links - Only show if logged in */}
+                  {currentUser && (
+                    <>
+                      <div className="flex flex-col gap-2">
+                        {!isAdmin && (
+                          <Link
+                            href="/dashboard"
+                            className="px-3 py-2 text-sm font-medium rounded-md hover:bg-accent transition-colors"
+                            onClick={() => setMobileMenuOpen(false)}
+                          >
+                            Dashboard
+                          </Link>
+                        )}
+                        <Link
+                          href="/my-bounties"
+                          className="px-3 py-2 text-sm font-medium rounded-md hover:bg-accent transition-colors"
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          My Bounties
+                        </Link>
+                        {isAdmin && (
+                          <Link
+                            href="/admin"
+                            className="px-3 py-2 text-sm font-bold text-primary rounded-md hover:bg-accent transition-colors"
+                            onClick={() => setMobileMenuOpen(false)}
+                          >
+                            Admin Console
+                          </Link>
+                        )}
+                      </div>
 
-                  {/* Divider */}
-                  <div className="border-t" />
+                      {/* Divider */}
+                      <div className="border-t" />
 
-                  {/* Mobile User Menu */}
-                  <div className="flex items-center gap-3 px-3 py-2">
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage
-                        src={
-                          currentUser?.avatar ||
-                          "/abstract-geometric-shapes.png"
-                        }
-                        alt="User"
-                      />
-                      <AvatarFallback>JD</AvatarFallback>
-                    </Avatar>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium">
-                        {currentUser?.name}
-                      </span>
-                    </div>
-                  </div>
+                      {/* Mobile Wallet (Admin only) */}
+                      {isAdmin && (
+                        <Button
+                          variant="outline"
+                          className="gap-2 justify-start font-mono"
+                          onClick={() => {
+                            setTopupOpen(true);
+                            setMobileMenuOpen(false);
+                          }}
+                        >
+                          <Wallet className="h-4 w-4" />
+                          {zecBalance.toFixed(4)} ZEC
+                        </Button>
+                      )}
 
-                  <div className="flex flex-col gap-1">
-                    {/* <Button
-                      variant="ghost"
-                      className="justify-start"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Profile
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="justify-start"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Billing
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="justify-start"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Team
-                    </Button> */}
-                    <div className="border-t my-2" />
-                    <Button
-                      variant="ghost"
-                      className="justify-start text-destructive"
-                      asChild
-                    >
-                      <div onClick={logout}>Log out</div>
-                    </Button>
-                  </div>
+                      {/* Mobile Notifications */}
+                      <Button variant="outline" className="gap-2 justify-start">
+                        <Bell className="h-4 w-4" />
+                        Notifications
+                      </Button>
+
+                      {/* Divider */}
+                      <div className="border-t" />
+
+                      {/* Mobile User Menu */}
+                      <div className="flex items-center gap-3 px-3 py-2">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage
+                            src={
+                              currentUser?.avatar ||
+                              "/abstract-geometric-shapes.png"
+                            }
+                            alt="User"
+                          />
+                          <AvatarFallback>
+                            {currentUser?.name?.charAt(0).toUpperCase() || "U"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium">
+                            {currentUser?.name}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {currentUser?.email}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <div className="border-t my-2" />
+                        <Button
+                          variant="ghost"
+                          className="justify-start text-destructive"
+                          asChild
+                        >
+                          <div onClick={logout} className="cursor-pointer">
+                            Log out
+                          </div>
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </SheetContent>
             </Sheet>
           </div>
         </div>
       </nav>
-      {isAdmin && (
+      {isAdmin && currentUser && (
         <WalletTopupModal open={topupOpen} onOpenChange={setTopupOpen} />
       )}
     </>

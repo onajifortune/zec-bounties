@@ -81,6 +81,7 @@ export default function AdminDashboard() {
     paymentIDs,
     fetchTransactionHashes,
     authorizeDuePayment,
+    currentUser,
   } = useBounty();
 
   const [activeTab, setActiveTab] = useState<"overview" | "payments" | "txids">(
@@ -101,6 +102,7 @@ export default function AdminDashboard() {
   // Load all submissions on mount for the indicators
   useEffect(() => {
     const loadAllSubmissions = async () => {
+      if (!currentUser) return;
       const allSubs: WorkSubmission[] = [];
       for (const bounty of bounties) {
         try {
@@ -116,10 +118,10 @@ export default function AdminDashboard() {
       setAllSubmissions(allSubs);
     };
 
-    if (bounties.length > 0) {
+    if (bounties.length > 0 && currentUser) {
       loadAllSubmissions();
     }
-  }, [bounties, fetchWorkSubmissions]);
+  }, [bounties, fetchWorkSubmissions, currentUser]);
 
   const handleStatusChange = (bountyId: string, newStatus: BountyStatus) => {
     updateBountyStatus(bountyId, newStatus);

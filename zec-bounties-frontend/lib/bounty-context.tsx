@@ -209,6 +209,13 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     };
   };
 
+  // Helper function to get public headers (no auth required)
+  const getPublicHeaders = () => {
+    return {
+      "Content-Type": "application/json",
+    };
+  };
+
   // ==================== Zcash Params Functions ====================
 
   // Import wallet with seed phrase
@@ -748,12 +755,12 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Fetch all categories
+  // Fetch all categories (PUBLIC - no auth required)
   const fetchCategories = async () => {
     setCategoriesLoading(true);
     try {
       const res = await fetch(`${backendUrl}/api/bounties/categories`, {
-        headers: getAuthHeaders(),
+        headers: getPublicHeaders(), // Changed from getAuthHeaders()
       });
 
       if (!res.ok) throw new Error("Failed to fetch categories");
@@ -850,18 +857,17 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Fetch all users from backend (excluding admins for assignment)
+  // Fetch all users (PUBLIC - no auth required for basic user list)
   const fetchUsers = async () => {
     setUsersLoading(true);
     try {
       const res = await fetch(`${backendUrl}/api/bounties/users`, {
-        headers: getAuthHeaders(),
+        headers: getPublicHeaders(), // Changed from getAuthHeaders()
       });
 
       if (!res.ok) throw new Error("Failed to fetch users");
 
       const data = await res.json();
-      // Filter out admin users for assignment purposes
       const nonAdminUsersData = data.filter(
         (user: User) => user.role !== "ADMIN",
       );
@@ -1167,10 +1173,13 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     return allApplications.find((app) => app.bountyId === bountyId) || null;
   };
 
-  // Initialize auth and fetch data
+  // Initialize auth and fetch PUBLIC data
   useEffect(() => {
     const initializeAuth = async () => {
       const savedToken = localStorage.getItem("authToken");
+
+      // Always fetch public data (bounties, categories, users)
+      await Promise.all([fetchBounties(), fetchUsers(), fetchCategories()]);
 
       if (savedToken) {
         try {
@@ -1183,9 +1192,6 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
           const data = await res.json();
           setCurrentUser(data.user);
           localStorage.setItem("currentUser", JSON.stringify(data.user));
-
-          // Fetch bounties, users, categories, and applications after successful auth
-          await Promise.all([fetchBounties(), fetchUsers(), fetchCategories()]);
         } catch (error) {
           console.error("Token validation failed:", error);
           localStorage.removeItem("authToken");
@@ -1431,12 +1437,12 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     };
   }, [currentUser?.id]);
 
-  // Fetch all bounties from backend
+  // Fetch all bounties (PUBLIC - no auth required)
   const fetchBounties = async () => {
     setBountiesLoading(true);
     try {
       const res = await fetch(`${backendUrl}/api/bounties`, {
-        headers: getAuthHeaders(),
+        headers: getPublicHeaders(), // Changed from getAuthHeaders()
       });
 
       if (!res.ok) throw new Error("Failed to fetch bounties");
@@ -1620,12 +1626,12 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("authToken");
     localStorage.removeItem("currentUser");
     setCurrentUser(null);
-    setBounties([]);
-    setUsers([]);
     setApplications([]);
     setAllApplications([]);
-    setCategories([]);
     setZcashParams([]);
+    fetchBounties();
+    fetchCategories();
+    fetchUsers();
   };
 
   // Apply to bounty
