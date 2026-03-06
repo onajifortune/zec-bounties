@@ -2,18 +2,15 @@ import { useState } from "react";
 import { useBounty } from "@/lib/bounty-context";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, CheckCircle2, Coins } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 export function AuthorizePaymentPanel() {
   const { bounties, authorizeDuePayment, zcashParams } = useBounty();
-  const { toast } = useToast();
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Only show DONE, approved, unpaid bounties
   const eligibleBounties = bounties.filter(
     (b) => b.status === "DONE" && b.isApproved && !b.isPaid,
   );
@@ -30,9 +27,9 @@ export function AuthorizePaymentPanel() {
 
   const toggleAll = () => {
     if (selectedIds.size === eligibleBounties.length) {
-      setSelectedIds(new Set()); // deselect all
+      setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(eligibleBounties.map((b) => b.id))); // select all
+      setSelectedIds(new Set(eligibleBounties.map((b) => b.id)));
     }
   };
 
@@ -47,21 +44,24 @@ export function AuthorizePaymentPanel() {
     try {
       const result = await authorizeDuePayment(Array.from(selectedIds));
 
-      toast({
-        title: "Payment authorized",
-        description: `${result.paidCount} bounty payment(s) sent${
-          result.skipped.length > 0
+      toast.success("Payment authorized", {
+        description:
+          `${result.paidCount} bounty payment(s) sent` +
+          (result.skipped.length > 0
             ? `. ${result.skipped.length} skipped (missing z_address).`
-            : "."
-        }`,
+            : "."),
       });
 
       setSelectedIds(new Set());
     } catch (error: any) {
-      toast({
-        title: "Payment failed",
-        description: error.message || "Failed to authorize payment",
-        variant: "destructive",
+      // error.message will be "Payment failed: <CLI details>" from the context
+      const [title, ...rest] = error.message?.split(": ") ?? [];
+      const description =
+        rest.join(": ") || error.message || "Failed to authorize payment";
+
+      toast.error(title || "Payment failed", {
+        description,
+        duration: 8000, // keep it visible longer for technical errors
       });
     } finally {
       setIsProcessing(false);
