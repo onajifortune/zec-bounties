@@ -642,12 +642,15 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to authorize payment");
+        // Combine error + details so the toast can split them cleanly
+        const message = errorData.details
+          ? `${errorData.error}: ${errorData.details}`
+          : errorData.error || "Failed to authorize payment";
+        throw new Error(message);
       }
 
       const data = await res.json();
 
-      // Refresh bounties to reflect paid status
       await fetchBounties();
 
       return {
