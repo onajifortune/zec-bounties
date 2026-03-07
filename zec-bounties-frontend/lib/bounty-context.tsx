@@ -151,6 +151,7 @@ interface BountyContextType {
   syncStatus: SyncStatus | null;
   syncStatusLoading: boolean;
   syncStatusError: string | null;
+  rescanStatus: string | null;
   fetchSyncStatus: () => Promise<void>;
   rescanWallet: () => Promise<void>;
   rescanLoading: boolean;
@@ -241,6 +242,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [syncStatusLoading, setSyncStatusLoading] = useState(false);
   const [syncStatusError, setSyncStatusError] = useState<string | null>(null);
+  const [rescanStatus, setRescanStatus] = useState<string | null>(null);
   const [rescanLoading, setRescanLoading] = useState(false);
 
   // Helper function to get auth headers
@@ -305,6 +307,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!res.ok) throw new Error("Rescan failed");
+      setRescanStatus("Rescan Success");
     } catch (error) {
       console.error("Failed to rescan wallet:", error);
       setSyncStatusError(
@@ -1872,6 +1875,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         syncStatus,
         syncStatusLoading,
         syncStatusError,
+        rescanStatus,
         fetchSyncStatus,
         rescanWallet,
         rescanLoading,

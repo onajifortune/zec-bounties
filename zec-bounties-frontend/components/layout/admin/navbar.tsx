@@ -102,6 +102,7 @@ export function AdminNavbar({
     fetchBalance,
     fetchAddresses,
     syncStatus,
+    rescanStatus,
     syncStatusError,
     fetchSyncStatus,
     rescanWallet,
@@ -174,9 +175,9 @@ export function AdminNavbar({
               />
             </div>
 
-            {/* Sync status badge */}
+            {/* Sync / rescan status badges */}
             <TooltipProvider delayDuration={300}>
-              {(syncStatus || syncStatusError) && (
+              {syncStatus || syncStatusError ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div>
@@ -199,7 +200,24 @@ export function AdminNavbar({
                       : JSON.stringify(syncStatus, null, 2)}
                   </TooltipContent>
                 </Tooltip>
-              )}
+              ) : rescanStatus ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/60 border text-xs font-mono text-emerald-500">
+                      <CheckCircle2 className="h-3 w-3 shrink-0" />
+                      <span className="hidden xl:inline">Rescan Success</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="bottom"
+                    className="font-mono text-xs max-w-xs whitespace-pre-wrap"
+                  >
+                    {typeof rescanStatus === "string"
+                      ? rescanStatus
+                      : JSON.stringify(rescanStatus, null, 2)}
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
 
               {/* Wallet balance */}
               <Button
@@ -392,6 +410,21 @@ export function AdminNavbar({
                       ) : (
                         <SyncStatusBadge status={syncStatus} />
                       )}
+                    </div>
+                  )}
+
+                  {/* Mobile Rescan Status */}
+                  {rescanStatus && (
+                    <div className="px-1">
+                      <p className="text-xs text-muted-foreground mb-1.5">
+                        Rescan Status
+                      </p>
+                      <div className="flex items-center gap-2 text-xs text-emerald-500 font-mono">
+                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                        {typeof rescanStatus === "string"
+                          ? rescanStatus
+                          : JSON.stringify(rescanStatus)}
+                      </div>
                     </div>
                   )}
 
