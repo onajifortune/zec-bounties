@@ -193,7 +193,7 @@ export function ZAddressCollectionModal({
             {/* Help text */}
             <div className="text-center">
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Don't have a Z-address? Get one from your Zcash wallet app
+                Don't have a shielded address? Get one from your Zcash wallet app
               </p>
             </div>
           </div>
@@ -203,12 +203,12 @@ export function ZAddressCollectionModal({
         <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
           <div className="space-y-2">
             <h4 className="text-sm font-medium text-slate-900 dark:text-slate-100">
-              Need help finding your Z-address?
+              Need help finding your UA-address?
             </h4>
             <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
-              <p>• Open your Zcash wallet (Ywallet, Zecwallet, etc.)</p>
+              <p>• Open your Zcash wallet (Zingo, Zkool, etc.)</p>
               <p>• Look for "Receive" or "Shielded Address"</p>
-              <p>• Copy the address that starts with </p>
+              <p>• Copy the address that starts with a u1... </p>
               <p>• Paste it in the field above</p>
             </div>
           </div>
