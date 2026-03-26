@@ -1,3 +1,64 @@
+// ─────────────────────────────────────────────────────────────────
+// DIFF SUMMARY — two targeted changes to page.tsx (AdminDashboard)
+// ─────────────────────────────────────────────────────────────────
+//
+// CHANGE A  ▸  Add `assigneeSectionBounty` state so clicking the
+//              "Assign" button opens EditBountyModal on the
+//              "assignees" tab directly, without touching the
+//              existing `editingBounty` flow (which opens on "details").
+//
+// CHANGE B  ▸  In handleWinnerConfirm, after marking the bounty
+//              DONE, call updateBounty with only the winner's userId
+//              so all other assignees are removed automatically via
+//              the existing /assignees endpoint.
+// ─────────────────────────────────────────────────────────────────
+
+// ── CHANGE A ── add this state next to the existing editingBounty state ──────
+//
+//   const [assigneeSectionBounty, setAssigneeSectionBounty] = useState<Bounty | null>(null);
+//
+// ── CHANGE B ── replace handleWinnerConfirm with this version ────────────────
+//
+//   const handleWinnerConfirm = async (bountyId: string, winnerId: string) => {
+//     // 1. mark as DONE with the chosen winner
+//     await updateBountyStatus(bountyId, "DONE", winnerId);
+//
+//     // 2. strip all other assignees — keep only the winner
+//     try {
+//       await updateBounty(bountyId, { userIds: [winnerId] } as any);
+//     } catch (err) {
+//       console.error("Failed to trim assignees to winner:", err);
+//     }
+//
+//     setWinnerBounty(null);
+//   };
+//
+// ── CHANGE C ── replace the "Assign" Button in the Assignee cell ─────────────
+//
+//   <Button
+//     variant="ghost"
+//     size="sm"
+//     className="h-7 text-[10px] gap-1 px-2 border border-dashed"
+//     onClick={() => setAssigneeSectionBounty(bounty)}   // ← changed
+//   >
+//     <UserPlus className="h-3 w-3" /> Assign
+//   </Button>
+//
+// ── CHANGE D ── add a second EditBountyModal instance for assignees tab ───────
+//
+//   <EditBountyModal
+//     bounty={assigneeSectionBounty}
+//     open={!!assigneeSectionBounty}
+//     defaultSection="assignees"
+//     onOpenChange={(open) => {
+//       if (!open) setAssigneeSectionBounty(null);
+//     }}
+//   />
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// Full updated file below
+// ─────────────────────────────────────────────────────────────────────────────
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -77,6 +138,7 @@ export default function AdminDashboard() {
     bounties,
     nonAdminUsers,
     updateBountyStatus,
+    updateBounty, // ← needed for winner stripping
     approveBounty,
     getAllApplicationsForBounty,
     acceptApplication,
@@ -104,7 +166,13 @@ export default function AdminDashboard() {
   const [allSubmissions, setAllSubmissions] = useState<WorkSubmission[]>([]);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [isFetchingTxHashes, setIsFetchingTxHashes] = useState(false);
+
+  // "details" tab — opened by clicking the bounty title
   const [editingBounty, setEditingBounty] = useState<Bounty | null>(null);
+  // "assignees" tab — opened by clicking the Assign button in the table
+  const [assigneeSectionBounty, setAssigneeSectionBounty] = // ← CHANGE A
+    useState<Bounty | null>(null);
+
   const [winnerBounty, setWinnerBounty] = useState<Bounty | null>(null);
 
   // Load all submissions on mount for the indicators
@@ -145,7 +213,6 @@ export default function AdminDashboard() {
 
     const assigneeCount = bounty.assignees?.length ?? 0;
 
-    // Add this check:
     if (assigneeCount === 0) {
       toast.error("Cannot mark as done", {
         description:
@@ -165,10 +232,21 @@ export default function AdminDashboard() {
     }
   };
 
+  // ── CHANGE B ─────────────────────────────────────────────────────────────
   const handleWinnerConfirm = async (bountyId: string, winnerId: string) => {
+    // 1. Mark the bounty as DONE with the selected winner
     await updateBountyStatus(bountyId, "DONE", winnerId);
+
+    // 2. Strip all other assignees — keep only the winner
+    try {
+      await updateBounty(bountyId, { userIds: [winnerId] } as any);
+    } catch (err) {
+      console.error("Failed to trim assignees to winner:", err);
+    }
+
     setWinnerBounty(null);
   };
+  // ─────────────────────────────────────────────────────────────────────────
 
   const handleApprovalChange = async (bountyId: string, approved: boolean) => {
     setIsUpdating(true);
@@ -428,6 +506,8 @@ export default function AdminDashboard() {
                         (s) => s.status === "pending",
                       ).length;
 
+                      console.log(bounty.assignee);
+
                       return (
                         <TableRow
                           key={bounty.id}
@@ -473,7 +553,26 @@ export default function AdminDashboard() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            {bounty.assignees && bounty.assignees.length > 0 ? (
+                            {bounty.assignee && bounty.assigneeUser ? (
+                              // Scalar assignee takes priority
+                              <div className="flex items-center gap-2">
+                                <Avatar className="h-6 w-6 border">
+                                  <AvatarImage
+                                    src={
+                                      bounty.assigneeUser.avatar ||
+                                      "/placeholder-user.jpg"
+                                    }
+                                  />
+                                  <AvatarFallback>
+                                    {bounty.assigneeUser.name?.[0] || "?"}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="text-xs font-medium">
+                                  {bounty.assigneeUser.name}
+                                </span>
+                              </div>
+                            ) : bounty.assignees &&
+                              bounty.assignees.length > 0 ? (
                               <div className="flex items-center gap-2">
                                 {/* Stacked avatars */}
                                 <div className="flex items-center">
@@ -532,10 +631,12 @@ export default function AdminDashboard() {
                                 </span>
                               </div>
                             ) : (
+                              // ── CHANGE C ── opens assignees tab directly ──
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 className="h-7 text-[10px] gap-1 px-2 border border-dashed"
+                                onClick={() => setAssigneeSectionBounty(bounty)}
                               >
                                 <UserPlus className="h-3 w-3" /> Assign
                               </Button>
@@ -758,11 +859,22 @@ export default function AdminDashboard() {
         )}
       </div>
 
+      {/* Opens on "details" tab — triggered by clicking the bounty title */}
       <EditBountyModal
         bounty={editingBounty}
         open={!!editingBounty}
         onOpenChange={(open) => {
           if (!open) setEditingBounty(null);
+        }}
+      />
+
+      {/* ── CHANGE D ── Opens on "assignees" tab — triggered by the Assign button */}
+      <EditBountyModal
+        bounty={assigneeSectionBounty}
+        open={!!assigneeSectionBounty}
+        defaultSection="assignees"
+        onOpenChange={(open) => {
+          if (!open) setAssigneeSectionBounty(null);
         }}
       />
 
