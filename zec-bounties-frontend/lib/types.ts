@@ -124,3 +124,36 @@ export interface BountyAssignee {
     z_address?: string;
   };
 }
+
+export interface TeamMember {
+  id: string;
+  teamId: string;
+  userId: string;
+  role: "OWNER" | "ADMIN" | "MEMBER";
+  joinedAt: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    avatar?: string;
+  };
+}
+
+export interface TeamWallet {
+  id: string;
+  teamId: string;
+  accountName: string;
+  chain: string;
+  serverUrl: string;
+  createdAt: string;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+  members: TeamMember[];
+  wallet?: TeamWallet | null;
+}
