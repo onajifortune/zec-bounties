@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import {
   Loader2,
   Save,
@@ -32,18 +31,21 @@ interface EditBountyModalProps {
   bounty: Bounty | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** If provided, the modal opens directly on this tab */
+  defaultSection?: "details" | "assignees";
 }
 
 export function EditBountyModal({
   bounty,
   open,
   onOpenChange,
+  defaultSection = "details",
 }: EditBountyModalProps) {
   const { updateBounty, nonAdminUsers } = useBounty();
 
   const [isSaving, setIsSaving] = useState(false);
   const [activeSection, setActiveSection] = useState<"details" | "assignees">(
-    "details",
+    defaultSection,
   );
 
   // Form fields
@@ -56,7 +58,7 @@ export function EditBountyModal({
   const [assigneeSearch, setAssigneeSearch] = useState("");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
-  // Populate form when bounty changes
+  // Populate form when bounty changes; also respect defaultSection on re-open
   useEffect(() => {
     if (!bounty) return;
     setTitle(bounty.title ?? "");
@@ -71,8 +73,9 @@ export function EditBountyModal({
     const existingIds = bounty.assignees?.map((a) => a.userId) ?? [];
     setSelectedUserIds(existingIds);
     setAssigneeSearch("");
-    setActiveSection("details");
-  }, [bounty, open]);
+    // Always honour the defaultSection when the modal (re-)opens
+    setActiveSection(defaultSection);
+  }, [bounty, open, defaultSection]);
 
   const toggleUser = (userId: string) => {
     setSelectedUserIds((prev) =>

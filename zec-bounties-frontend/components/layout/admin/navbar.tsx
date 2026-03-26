@@ -202,19 +202,28 @@ export function AdminNavbar({
       <nav className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex h-14 items-center px-4 md:px-6">
           {/* Logo */}
-          <Link href="/admin" className="transition-colors hover:text-primary">
-            <div className="flex items-center gap-2 font-bold text-xl tracking-tight mr-4 md:mr-6">
+          <div className="flex items-center gap-2 font-bold text-xl tracking-tight mr-4 md:mr-6">
+            <Link
+              href="https://zechub.wiki"
+              target="_blank"
+              className="transition-colors hover:text-primary"
+            >
               <img
                 src="ZecHubBlue.png"
                 alt="ZecHubBlue.png"
                 style={{ height: "3rem" }}
               />
+            </Link>
+            <Link
+              href="/admin"
+              className="transition-colors hover:text-primary"
+            >
               <span className="hidden sm:inline">ZEC Bounties</span>
-            </div>
-          </Link>
+            </Link>
+          </div>
 
           {/* Desktop Navigation */}
-          <div className="hidden lg:flex items-center space-x-4 text-sm font-medium mr-auto">
+          <div className="hidden xl:flex items-center space-x-4 text-sm font-medium mr-auto">
             <Link
               href="/admin/dashboard"
               className="transition-colors hover:text-primary"
@@ -236,7 +245,7 @@ export function AdminNavbar({
           </div>
 
           {/* Desktop Right Side */}
-          <div className="hidden lg:flex items-center gap-1 ml-auto">
+          <div className="hidden xl:flex items-center gap-1 ml-auto">
             {/* Search */}
             <div className="relative max-w-sm mr-2">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -418,7 +427,7 @@ export function AdminNavbar({
           </div>
 
           {/* Mobile Right Side */}
-          <div className="flex lg:hidden items-center gap-2 ml-auto">
+          <div className="flex xl:hidden items-center gap-2 ml-auto">
             <Button
               variant="ghost"
               size="icon"
@@ -523,7 +532,7 @@ export function AdminNavbar({
                       : `${(0.0).toFixed(4)} ZEC`}
                   </Button>
 
-                  <div className="grid grid-cols-2 lg:flex gap-2">
+                  <div className="grid grid-cols-2 xl:flex gap-2">
                     <Button
                       variant="outline"
                       className="gap-2 flex-1"

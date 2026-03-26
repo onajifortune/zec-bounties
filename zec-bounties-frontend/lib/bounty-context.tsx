@@ -1443,7 +1443,9 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
           break;
 
         case "application_created":
-          setApplications((prev) => [...prev, msg.payload]);
+          if (msg.payload.applicantId === currentUser?.id) {
+            setApplications((prev) => [...prev, msg.payload]);
+          }
           setAllApplications((prev) => [...prev, msg.payload]);
           setBountyApplications((prev) => ({
             ...prev,
