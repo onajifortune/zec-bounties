@@ -77,6 +77,7 @@ export default function AdminDashboard() {
     bounties,
     nonAdminUsers,
     updateBountyStatus,
+    updateBounty, // ← needed for winner stripping
     approveBounty,
     getAllApplicationsForBounty,
     acceptApplication,
@@ -104,6 +105,8 @@ export default function AdminDashboard() {
   const [allSubmissions, setAllSubmissions] = useState<WorkSubmission[]>([]);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [isFetchingTxHashes, setIsFetchingTxHashes] = useState(false);
+
+  // "details" tab — opened by clicking the bounty title
   const [editingBounty, setEditingBounty] = useState<Bounty | null>(null);
   const [assigneeSectionBounty, setAssigneeSectionBounty] =
     useState<Bounty | null>(null);
@@ -180,10 +183,21 @@ export default function AdminDashboard() {
     }
   };
 
+  // ── CHANGE B ─────────────────────────────────────────────────────────────
   const handleWinnerConfirm = async (bountyId: string, winnerId: string) => {
+    // 1. Mark the bounty as DONE with the selected winner
     await updateBountyStatus(bountyId, "DONE", winnerId);
+
+    // 2. Strip all other assignees — keep only the winner
+    try {
+      await updateBounty(bountyId, { userIds: [winnerId] } as any);
+    } catch (err) {
+      console.error("Failed to trim assignees to winner:", err);
+    }
+
     setWinnerBounty(null);
   };
+  // ─────────────────────────────────────────────────────────────────────────
 
   const handleApprovalChange = async (bountyId: string, approved: boolean) => {
     setIsUpdating(true);
@@ -443,6 +457,8 @@ export default function AdminDashboard() {
                         (s) => s.status === "pending",
                       ).length;
 
+                      console.log(bounty.assignee);
+
                       return (
                         <TableRow
                           key={bounty.id}
@@ -553,6 +569,7 @@ export default function AdminDashboard() {
                                 </span>
                               </button>
                             ) : (
+                              // ── CHANGE C ── opens assignees tab directly ──
                               <Button
                                 variant="ghost"
                                 size="sm"

@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import {
   Loader2,
   Save,
@@ -58,7 +57,7 @@ export function EditBountyModal({
   const [assigneeSearch, setAssigneeSearch] = useState("");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
-  // Populate form when bounty changes
+  // Populate form when bounty changes; also respect defaultSection on re-open
   useEffect(() => {
     if (!bounty) return;
     setTitle(bounty.title ?? "");
