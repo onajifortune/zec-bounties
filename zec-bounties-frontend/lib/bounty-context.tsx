@@ -1173,8 +1173,6 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         headers: getAuthHeaders(),
       });
 
-      console.log(res);
-
       if (!res.ok) throw new Error("Failed to fetch applications");
 
       const data = await res.json();
@@ -1325,7 +1323,6 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch(`${backendUrl}/api/transactions/balance`, {
         headers: getAuthHeaders(),
       });
-      console.log(res);
 
       if (res.ok) {
         const data = await res.json();
