@@ -457,8 +457,6 @@ export default function AdminDashboard() {
                         (s) => s.status === "pending",
                       ).length;
 
-                      console.log(bounty.assignee);
-
                       return (
                         <TableRow
                           key={bounty.id}
