@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useMemo } from "react";
 import type {
   User,
   Bounty,
@@ -1661,275 +1661,302 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   // WebSocket connection
   useEffect(() => {
     if (!currentUser) return;
-    const ws = new WebSocket(`${backendWebSpocketUrl}`);
 
-    ws.onopen = () => {
-      ws.send(
-        JSON.stringify({
-          type: "join",
-          userId: currentUser.id,
-          userName: currentUser.name,
-        }),
-      );
-    };
+    let ws: WebSocket;
+    let retryDelay = 1000;
+    let retryTimeout: ReturnType<typeof setTimeout>;
+    let destroyed = false;
 
-    ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
+    const userId = currentUser.id;
+    const userName = currentUser.name;
 
-      switch (msg.type) {
-        case "new_bounty":
-          setBounties((prev) => [msg.payload, ...prev]);
-          break;
+    function connect() {
+      ws = new WebSocket(`${backendWebSpocketUrl}`);
 
-        case "bounty_updated":
-          setBounties((prev) =>
-            prev.map((bounty) =>
-              bounty.id === msg.payload.id ? msg.payload : bounty,
-            ),
-          );
-          break;
+      ws.onopen = () => {
+        retryDelay = 1000; // reset backoff on successful connect
+        ws.send(
+          JSON.stringify({
+            type: "join",
+            userId,
+            userName,
+          }),
+        );
+      };
 
-        case "bounty_status_changed":
-          setBounties((prev) =>
-            prev.map((bounty) =>
-              bounty.id === msg.payload.id ? msg.payload : bounty,
-            ),
-          );
-          break;
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
 
-        case "bounty_approved":
-          setBounties((prev) =>
-            prev.map((bounty) =>
-              bounty.id === msg.payload.id ? msg.payload : bounty,
-            ),
-          );
-          break;
+        switch (msg.type) {
+          case "new_bounty":
+            setBounties((prev) => [msg.payload, ...prev]);
+            break;
 
-        case "application_created":
-          if (msg.payload.applicantId === currentUser?.id) {
-            setApplications((prev) => [...prev, msg.payload]);
-          }
-          setAllApplications((prev) => [...prev, msg.payload]);
-          setBountyApplications((prev) => ({
-            ...prev,
-            [msg.payload.bountyId]: [
-              ...(prev[msg.payload.bountyId] || []),
-              msg.payload,
-            ],
-          }));
-          break;
+          case "bounty_updated":
+            setBounties((prev) =>
+              prev.map((bounty) =>
+                bounty.id === msg.payload.id ? msg.payload : bounty,
+              ),
+            );
+            break;
 
-        case "application_updated":
-          setApplications((prev) =>
-            prev.map((app) => (app.id === msg.payload.id ? msg.payload : app)),
-          );
-          setAllApplications((prev) =>
-            prev.map((app) => (app.id === msg.payload.id ? msg.payload : app)),
-          );
-          setBountyApplications((prev) => ({
-            ...prev,
-            [msg.payload.bountyId]: (prev[msg.payload.bountyId] || []).map(
-              (app) => (app.id === msg.payload.id ? msg.payload : app),
-            ),
-          }));
-          fetchBounties();
-          break;
+          case "bounty_status_changed":
+            setBounties((prev) =>
+              prev.map((bounty) =>
+                bounty.id === msg.payload.id ? msg.payload : bounty,
+              ),
+            );
+            break;
 
-        case "application_deleted":
-          setApplications((prev) =>
-            prev.filter((app) => app.id !== msg.payload.id),
-          );
-          setAllApplications((prev) =>
-            prev.filter((app) => app.id !== msg.payload.id),
-          );
-          setBountyApplications((prev) => ({
-            ...prev,
-            [msg.payload.bountyId]: (prev[msg.payload.bountyId] || []).filter(
-              (app) => app.id !== msg.payload.id,
-            ),
-          }));
-          break;
+          case "bounty_approved":
+            setBounties((prev) =>
+              prev.map((bounty) =>
+                bounty.id === msg.payload.id ? msg.payload : bounty,
+              ),
+            );
+            break;
 
-        case "payment_authorized":
-          setBounties((prev) =>
-            prev.map((bounty) =>
-              bounty.id === msg.payload.id ? msg.payload : bounty,
-            ),
-          );
-          break;
+          case "application_created":
+            if (msg.payload.applicantId === currentUser?.id) {
+              setApplications((prev) => [...prev, msg.payload]);
+            }
+            setAllApplications((prev) => [...prev, msg.payload]);
+            setBountyApplications((prev) => ({
+              ...prev,
+              [msg.payload.bountyId]: [
+                ...(prev[msg.payload.bountyId] || []),
+                msg.payload,
+              ],
+            }));
+            break;
 
-        case "payment_processed":
-          fetchTransactionHashes();
-          fetchBounties();
-          break;
+          case "application_updated":
+            setApplications((prev) =>
+              prev.map((app) =>
+                app.id === msg.payload.id ? msg.payload : app,
+              ),
+            );
+            setAllApplications((prev) =>
+              prev.map((app) =>
+                app.id === msg.payload.id ? msg.payload : app,
+              ),
+            );
+            setBountyApplications((prev) => ({
+              ...prev,
+              [msg.payload.bountyId]: (prev[msg.payload.bountyId] || []).map(
+                (app) => (app.id === msg.payload.id ? msg.payload : app),
+              ),
+            }));
+            break;
 
-        case "balance_updated":
-          setBalance(msg.payload.balance);
-          break;
+          case "application_deleted":
+            setApplications((prev) =>
+              prev.filter((app) => app.id !== msg.payload.id),
+            );
+            setAllApplications((prev) =>
+              prev.filter((app) => app.id !== msg.payload.id),
+            );
+            setBountyApplications((prev) => ({
+              ...prev,
+              [msg.payload.bountyId]: (prev[msg.payload.bountyId] || []).filter(
+                (app) => app.id !== msg.payload.id,
+              ),
+            }));
+            break;
 
-        case "work_submitted":
-          fetchBounties();
-          break;
+          case "payment_authorized":
+            setBounties((prev) =>
+              prev.map((bounty) =>
+                bounty.id === msg.payload.id ? msg.payload : bounty,
+              ),
+            );
+            break;
 
-        case "submission_reviewed":
-          fetchBounties();
-          break;
+          case "payment_processed":
+            fetchTransactionHashes();
+            fetchBounties();
+            break;
 
-        case "category_created":
-          setCategories((prev) => [...prev, msg.payload]);
-          break;
+          case "balance_updated":
+            setBalance(msg.payload.balance);
+            break;
 
-        case "category_updated":
-          setCategories((prev) =>
-            prev.map((cat) => (cat.id === msg.payload.id ? msg.payload : cat)),
-          );
-          break;
+          case "work_submitted":
+            fetchBounties();
+            break;
 
-        case "category_deleted":
-          setCategories((prev) =>
-            prev.filter((cat) => cat.id !== msg.payload.id),
-          );
-          break;
+          case "submission_reviewed":
+            fetchBounties();
+            break;
 
-        case "transactions_fetched":
-          break;
+          case "category_created":
+            setCategories((prev) => [...prev, msg.payload]);
+            break;
 
-        case "balance_fetched":
-          setBalance(msg.payload.balance);
-          break;
+          case "category_updated":
+            setCategories((prev) =>
+              prev.map((cat) =>
+                cat.id === msg.payload.id ? msg.payload : cat,
+              ),
+            );
+            break;
 
-        case "sync_status":
-          setSyncStatus(msg.payload.data);
-          setSyncStatusError(null);
-          break;
+          case "category_deleted":
+            setCategories((prev) =>
+              prev.filter((cat) => cat.id !== msg.payload.id),
+            );
+            break;
 
-        case "account_created":
-          fetchZcashParams();
-          break;
+          case "transactions_fetched":
+            break;
 
-        case "addresses_fetched":
-          setAddress(msg.payload.addresses?.encoded_address);
-          break;
+          case "balance_fetched":
+            setBalance(msg.payload.balance);
+            break;
 
-        case "bounty_payment_authorized":
-          setBounties((prev) =>
-            prev.map((bounty) =>
-              bounty.id === msg.payload.id ? msg.payload : bounty,
-            ),
-          );
-          break;
+          case "sync_status":
+            setSyncStatus(msg.payload.data);
+            setSyncStatusError(null);
+            break;
 
-        case "batch_payment_processed":
-          fetchBounties();
-          fetchTransactionHashes();
-          fetchBalance();
-          break;
+          case "account_created":
+            fetchZcashParams();
+            break;
 
-        case "instant_payment_processed":
-          fetchBounties();
-          fetchTransactionHashes();
-          fetchBalance();
-          break;
+          case "addresses_fetched":
+            setAddress(msg.payload.addresses?.encoded_address);
+            break;
 
-        case "bounty_marked_paid":
-          setBounties((prev) =>
-            prev.map((bounty) =>
-              bounty.id === msg.payload.id ? msg.payload : bounty,
-            ),
-          );
-          break;
+          case "bounty_payment_authorized":
+            setBounties((prev) =>
+              prev.map((bounty) =>
+                bounty.id === msg.payload.id ? msg.payload : bounty,
+              ),
+            );
+            break;
 
-        case "bounty_paid":
-          fetchBounties();
-          fetchTransactionHashes();
-          fetchBalance();
-          break;
+          case "batch_payment_processed":
+            fetchBounties();
+            fetchTransactionHashes();
+            fetchBalance();
+            break;
 
-        case "bounty_assignees_updated":
-          fetchBounties();
-          break;
+          case "instant_payment_processed":
+            fetchBounties();
+            fetchTransactionHashes();
+            fetchBalance();
+            break;
 
-        case "team_created":
-          setTeams((prev) => [msg.payload, ...prev]);
-          break;
+          case "bounty_marked_paid":
+            setBounties((prev) =>
+              prev.map((bounty) =>
+                bounty.id === msg.payload.id ? msg.payload : bounty,
+              ),
+            );
+            break;
 
-        case "team_updated":
-          setTeams((prev) =>
-            prev.map((t) => (t.id === msg.payload.id ? msg.payload : t)),
-          );
-          break;
+          case "bounty_paid":
+            fetchBounties();
+            fetchTransactionHashes();
+            fetchBalance();
+            break;
 
-        case "team_deleted":
-          setTeams((prev) => prev.filter((t) => t.id !== msg.payload.id));
-          fetchZcashParams();
-          fetchTeams();
-          break;
+          case "bounty_assignees_updated":
+            fetchBounties();
+            break;
 
-        case "team_members_updated":
-          setTeams((prev) =>
-            prev.map((t) => {
-              if (t.id !== msg.payload.teamId) return t;
-              const merged = [
-                ...t.members.filter(
-                  (m) =>
-                    !msg.payload.members.find(
-                      (nm: TeamMember) => nm.userId === m.userId,
-                    ),
-                ),
-                ...msg.payload.members,
-              ];
-              return { ...t, members: merged };
-            }),
-          );
-          // Re-fetch params in case team wallet was auto-assigned to new members
-          fetchZcashParams();
-          break;
+          case "team_created":
+            setTeams((prev) => [msg.payload, ...prev]);
+            break;
 
-        case "team_member_removed":
-          setTeams((prev) =>
-            prev.map((t) =>
-              t.id !== msg.payload.teamId
-                ? t
-                : {
-                    ...t,
-                    members: t.members.filter(
-                      (m) => m.userId !== msg.payload.userId,
-                    ),
-                  },
-            ),
-          );
-          break;
+          case "team_updated":
+            setTeams((prev) =>
+              prev.map((t) => (t.id === msg.payload.id ? msg.payload : t)),
+            );
+            break;
 
-        case "team_wallet_created":
-        case "team_wallet_imported":
-          setTeams((prev) =>
-            prev.map((t) =>
-              t.id !== msg.payload.teamId
-                ? t
-                : { ...t, wallet: msg.payload.wallet },
-            ),
-          );
-          fetchZcashParams();
-          fetchTeams();
-          break;
+          case "team_deleted":
+            setTeams((prev) => prev.filter((t) => t.id !== msg.payload.id));
+            fetchZcashParams();
+            fetchTeams();
+            break;
 
-        case "team_wallet_deleted":
-          setTeams((prev) =>
-            prev.map((t) =>
-              t.id !== msg.payload.teamId ? t : { ...t, wallet: null },
-            ),
-          );
-          break;
-      }
-    };
+          case "team_members_updated":
+            setTeams((prev) =>
+              prev.map((t) => {
+                if (t.id !== msg.payload.teamId) return t;
+                const merged = [
+                  ...t.members.filter(
+                    (m) =>
+                      !msg.payload.members.find(
+                        (nm: TeamMember) => nm.userId === m.userId,
+                      ),
+                  ),
+                  ...msg.payload.members,
+                ];
+                return { ...t, members: merged };
+              }),
+            );
+            // Re-fetch params in case team wallet was auto-assigned to new members
+            fetchZcashParams();
+            break;
 
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
+          case "team_member_removed":
+            setTeams((prev) =>
+              prev.map((t) =>
+                t.id !== msg.payload.teamId
+                  ? t
+                  : {
+                      ...t,
+                      members: t.members.filter(
+                        (m) => m.userId !== msg.payload.userId,
+                      ),
+                    },
+              ),
+            );
+            break;
 
-    ws.onclose = () => {};
+          case "team_wallet_created":
+          case "team_wallet_imported":
+            setTeams((prev) =>
+              prev.map((t) =>
+                t.id !== msg.payload.teamId
+                  ? t
+                  : { ...t, wallet: msg.payload.wallet },
+              ),
+            );
+            fetchZcashParams();
+            fetchTeams();
+            break;
+
+          case "team_wallet_deleted":
+            setTeams((prev) =>
+              prev.map((t) =>
+                t.id !== msg.payload.teamId ? t : { ...t, wallet: null },
+              ),
+            );
+            break;
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+      };
+
+      ws.onclose = () => {
+        if (destroyed) return; // don't reconnect if the component unmounted
+        retryTimeout = setTimeout(() => {
+          retryDelay = Math.min(retryDelay * 2, 30000); // cap at 30s
+          connect();
+        }, retryDelay);
+      };
+    }
+
+    connect();
 
     return () => {
+      destroyed = true;
+      clearTimeout(retryTimeout);
       if (ws.readyState === WebSocket.OPEN) {
         ws.close();
       }
@@ -1947,7 +1974,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       if (!res.ok) throw new Error("Failed to fetch bounties");
 
       const data = await res.json();
-      setBounties(data);
+      setBounties(Array.isArray(data) ? data : (data.data ?? []));
     } catch (error) {
       console.error("Failed to fetch bounties:", error);
     } finally {
@@ -2296,29 +2323,30 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Populate user data in bounties
-  // AFTER
-  const populatedBounties = bounties.map((bounty) => {
-    // Prefer the legacy single-assignee field; fall back to the first entry in
-    // the multi-assignee array so downstream consumers (e.g. payment panel)
-    // always get a fully-populated user object.
-    const primaryAssigneeId =
-      bounty.assignee ?? bounty.assignees?.[0]?.userId ?? null;
+  const populatedBounties = useMemo(
+    () =>
+      bounties.map((bounty) => {
+        const primaryAssigneeId =
+          bounty.assignee ?? bounty.assignees?.[0]?.userId ?? null;
 
-    return {
-      ...bounty,
-      createdByUser: users.find((u) => u.id === bounty.createdBy),
-      assigneeUser: primaryAssigneeId
-        ? nonAdminUsers.find((u) => u.id === primaryAssigneeId)
-        : undefined,
-      // Also hydrate every entry in the assignees array with its user object
-      assignees: (bounty.assignees ?? []).flatMap((a) => {
-        const user = nonAdminUsers.find((u) => u.id === a.userId);
-        if (!user) return []; // skip if user not found
-        return [{ ...a, user }];
+        return {
+          ...bounty,
+          createdByUser: users.find((u) => u.id === bounty.createdBy),
+          assigneeUser: primaryAssigneeId
+            ? nonAdminUsers.find((u) => u.id === primaryAssigneeId)
+            : undefined,
+          assignees: (bounty.assignees ?? []).flatMap((a) => {
+            const user = nonAdminUsers.find((u) => u.id === a.userId);
+            if (!user) return [];
+            return [{ ...a, user }];
+          }),
+          userApplication: applications.find(
+            (app) => app.bountyId === bounty.id,
+          ),
+        };
       }),
-      userApplication: applications.find((app) => app.bountyId === bounty.id),
-    };
-  });
+    [bounties, users, nonAdminUsers, applications],
+  );
 
   return (
     <BountyContext.Provider

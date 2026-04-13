@@ -491,9 +491,11 @@ export default function AdminDashboard() {
                                     ? "bg-slate-400"
                                     : bounty.status === "IN_PROGRESS"
                                       ? "bg-blue-500"
-                                      : bounty.status === "DONE"
-                                        ? "bg-green-500"
-                                        : "bg-red-500"
+                                      : bounty.status === "IN_REVIEW"
+                                        ? "bg-yellow-500"
+                                        : bounty.status === "DONE"
+                                          ? "bg-green-500"
+                                          : "bg-red-500"
                                 }`}
                               />
                               <span className="capitalize text-sm">
@@ -1068,7 +1070,7 @@ export default function AdminDashboard() {
                               Approve & Mark as Done
                             </Button>
 
-                            <Button
+                            {/* <Button
                               variant="outline"
                               onClick={() => {
                                 const textarea = document.getElementById(
@@ -1085,7 +1087,7 @@ export default function AdminDashboard() {
                             >
                               <FileText className="w-4 h-4 mr-2" />
                               Request Revision
-                            </Button>
+                            </Button> */}
 
                             <Button
                               variant="destructive"
