@@ -31,7 +31,6 @@ interface EditBountyModalProps {
   bounty: Bounty | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** If provided, the modal opens directly on this tab */
   defaultSection?: "details" | "assignees";
 }
 

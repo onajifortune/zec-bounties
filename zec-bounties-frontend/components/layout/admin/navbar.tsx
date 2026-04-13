@@ -18,6 +18,7 @@ import {
   FolderSync,
   ShieldCheck,
   User,
+  Users,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -47,6 +48,48 @@ import { WalletTopupModal } from "@/components/wallet-topup-modal";
 import { useBounty } from "@/lib/bounty-context";
 import type { SyncStatus } from "@/lib/bounty-context";
 import { useRouter } from "next/navigation";
+
+function TeamIndicator() {
+  const { currentTeam, zcashParams } = useBounty();
+  if (!currentTeam) return null;
+
+  const defaultWallet = zcashParams?.find((p) => p.isDefault);
+  if (!defaultWallet?.isTeam) return null;
+
+  const wallet = currentTeam.wallet;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/60 border text-xs cursor-default">
+          <Users className="h-3 w-3 text-primary shrink-0" />
+          {/* <span className="text-primary font-medium max-w-[80px] truncate">
+            {currentTeam.name}
+          </span> */}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="text-xs space-y-1 max-w-[220px]">
+        <p className="font-semibold">{currentTeam.name}</p>
+        {currentTeam.description && (
+          <p className="text-muted-foreground">{currentTeam.description}</p>
+        )}
+        <p className="text-muted-foreground">
+          {currentTeam.members.length} member
+          {currentTeam.members.length !== 1 ? "s" : ""}
+        </p>
+        {wallet ? (
+          <p className="text-muted-foreground font-mono">
+            {wallet.accountName} · {wallet.chain}
+          </p>
+        ) : (
+          <p className="text-muted-foreground/60 italic">
+            No wallet configured
+          </p>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 // ── Sync status badge ─────────────────────────────────────────────────────────
 function SyncStatusBadge({ status }: { status: SyncStatus | null }) {
@@ -167,6 +210,7 @@ export function AdminNavbar({
 
   const {
     currentUser,
+    currentTeam,
     logout,
     balance,
     fetchBalance,
@@ -241,6 +285,12 @@ export function AdminNavbar({
               className="transition-colors hover:text-primary"
             >
               Export
+            </Link>
+            <Link
+              href="/admin/teams"
+              className="transition-colors hover:text-primary"
+            >
+              Teams
             </Link>
           </div>
 
@@ -378,6 +428,9 @@ export function AdminNavbar({
                 </TooltipContent>
               </Tooltip>
 
+              {/* ── Team indicator ── */}
+              <TeamIndicator />
+
               {/* ── Role toggle (isRobin only) ── */}
               <RoleToggleButton />
 
@@ -484,6 +537,13 @@ export function AdminNavbar({
                     >
                       Export
                     </Link>
+                    <Link
+                      href="/admin/teams"
+                      className="px-3 py-2 text-sm font-medium rounded-md hover:bg-accent transition-colors"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Teams
+                    </Link>
                   </div>
 
                   <div className="border-t" />
@@ -571,6 +631,24 @@ export function AdminNavbar({
                       Rescan
                     </Button>
                   </div>
+
+                  {/* ── Mobile team indicator ── */}
+                  {currentTeam && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted/60 border">
+                      <Users className="h-4 w-4 text-primary shrink-0" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-sm font-medium truncate">
+                          {currentTeam.name}
+                        </span>
+                        {currentTeam.wallet && (
+                          <span className="text-xs text-muted-foreground font-mono truncate">
+                            {currentTeam.wallet.accountName} ·{" "}
+                            {currentTeam.wallet.chain}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* ── Mobile role toggle (isRobin only) ── */}
                   <RoleToggleButton compact />

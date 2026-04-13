@@ -9,7 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -36,6 +35,8 @@ import {
   Trash2,
   Download,
   AlertTriangle,
+  Users,
+  User,
 } from "lucide-react";
 import { useBounty } from "@/lib/bounty-context";
 import { formatAddress } from "@/lib/utils";
@@ -48,6 +49,165 @@ interface GlobalSettingsModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
+function partitionWallets(params: ZcashParams[], teams: any[]) {
+  const teamWallets: (ZcashParams & { teamName?: string })[] = [];
+  const personalWallets: ZcashParams[] = [];
+
+  for (const p of params) {
+    if (p.isTeam && p.teamId) {
+      const team = teams.find((t) => t.id === p.teamId);
+      teamWallets.push({ ...p, teamName: team?.name ?? `Team ${p.teamId}` });
+    } else {
+      personalWallets.push(p);
+    }
+  }
+
+  return { teamWallets, personalWallets };
+}
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+function WalletRow({
+  config,
+  isActive,
+  isSettingDefault,
+  isUpdating,
+  onEdit,
+  onDelete,
+  onSetActive,
+  teamName,
+}: {
+  config: ZcashParams;
+  isActive: boolean;
+  isSettingDefault: string | null;
+  isUpdating: boolean;
+  onEdit: (c: ZcashParams) => void;
+  onDelete: (c: ZcashParams) => void;
+  onSetActive: (c: ZcashParams) => void;
+  teamName?: string;
+}) {
+  const name = config.accountName || "Unnamed Account";
+  const initials = getInitials(name);
+
+  return (
+    <div
+      className={`flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg border transition-colors ${
+        isActive
+          ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50/40 dark:bg-emerald-950/20"
+          : "border-border hover:bg-muted/50"
+      }`}
+    >
+      {/* Avatar */}
+      <div
+        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium shrink-0 ${
+          teamName
+            ? "bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300"
+            : "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
+        }`}
+      >
+        {initials}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-sm font-medium truncate max-w-[120px] sm:max-w-none">
+            {name}
+          </span>
+          {isActive && (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <span className="text-xs text-emerald-600 dark:text-emerald-400">
+                Active
+              </span>
+            </>
+          )}
+          {config.isDefault && !isActive && (
+            <Badge className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-700 border-green-200 dark:bg-green-900 dark:text-green-300 dark:border-green-700">
+              Default
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground flex-wrap">
+          {teamName && (
+            <>
+              <span className="text-violet-600 dark:text-violet-400 truncate max-w-[80px] sm:max-w-none">
+                {teamName}
+              </span>
+              <span className="opacity-40">·</span>
+            </>
+          )}
+          <span
+            className={
+              config.chain === "mainnet"
+                ? "text-green-600 dark:text-green-400"
+                : "text-blue-600 dark:text-blue-400"
+            }
+          >
+            {config.chain || "mainnet"}
+          </span>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-1 shrink-0">
+        {!isActive && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onSetActive(config)}
+            disabled={isSettingDefault === config.accountName}
+            className="text-xs h-7 px-1.5 sm:px-2 hidden xs:flex"
+          >
+            {isSettingDefault === config.accountName
+              ? "Setting…"
+              : "Set active"}
+          </Button>
+        )}
+        {/* On very small screens show a compact "activate" icon button instead */}
+        {!isActive && (
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => onSetActive(config)}
+            disabled={isSettingDefault === config.accountName}
+            className="h-7 w-7 flex xs:hidden"
+            title="Set active"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+          </Button>
+        )}
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => onEdit(config)}
+          className="h-7 w-7"
+        >
+          <Edit className="w-3.5 h-3.5" />
+        </Button>
+        {!teamName && (
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => onDelete(config)}
+            className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+            disabled={isUpdating}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function GlobalSettingsModal({
   open,
   onOpenChange,
@@ -58,6 +218,7 @@ export function GlobalSettingsModal({
     updateZcashParams,
     deleteZcashParams,
     setDefaultWallet,
+    teams,
   } = useBounty();
   const { toast } = useToast();
 
@@ -80,29 +241,36 @@ export function GlobalSettingsModal({
     serverUrl: "https://zec.rocks:443",
   });
 
-  // Load Zcash params when modal opens
   useEffect(() => {
-    const loadZcashParams = async () => {
-      if (open) {
-        setIsLoading(true);
-        try {
-          if (zcashParams && zcashParams.length > 0) {
-            // Select the default wallet, falling back to the latest
-            const defaultParam =
-              zcashParams.find((p) => p.isDefault) ??
-              zcashParams[zcashParams.length - 1];
-            setSelectedConfig(defaultParam);
-          }
-        } catch (error) {
-          console.error("Error loading Zcash params:", error);
-        } finally {
-          setIsLoading(false);
+    if (open) {
+      setIsLoading(true);
+      try {
+        if (zcashParams && zcashParams.length > 0) {
+          const defaultParam =
+            zcashParams.find((p) => p.isDefault) ??
+            zcashParams[zcashParams.length - 1];
+          setSelectedConfig(defaultParam);
         }
+      } finally {
+        setIsLoading(false);
       }
-    };
-
-    loadZcashParams();
+    }
   }, [open, zcashParams]);
+
+  const { teamWallets, personalWallets } = partitionWallets(
+    zcashParams ?? [],
+    teams ?? [],
+  );
+
+  const activeTeamName =
+    selectedConfig?.isTeam && selectedConfig?.teamId
+      ? ((teams ?? []).find((t) => t.id === selectedConfig.teamId)?.name ??
+        `Team ${selectedConfig.teamId}`)
+      : undefined;
+
+  const activeInitials = selectedConfig
+    ? getInitials(selectedConfig.accountName || "Unnamed Account")
+    : "?";
 
   const handleEditClick = (config: ZcashParams) => {
     setSelectedConfig(config);
@@ -121,33 +289,23 @@ export function GlobalSettingsModal({
 
   const handleConfirmDelete = async () => {
     if (!configToDelete) return;
-
     setIsUpdating(true);
     try {
       await deleteZcashParams(configToDelete.accountName);
-
       toast({
         title: "Success",
-        description: `Zcash configuration "${configToDelete.accountName}" has been deleted.`,
+        description: `Configuration "${configToDelete.accountName}" deleted.`,
       });
-
-      // If the deleted config was the selected one, select another
       if (selectedConfig?.id === configToDelete.id) {
-        const remainingParams = zcashParams.filter(
-          (p) => p.id !== configToDelete.id,
-        );
-        setSelectedConfig(
-          remainingParams.length > 0 ? remainingParams[0] : null,
-        );
+        const remaining = zcashParams.filter((p) => p.id !== configToDelete.id);
+        setSelectedConfig(remaining.length > 0 ? remaining[0] : null);
       }
-
       setIsDeleteDialogOpen(false);
       setConfigToDelete(null);
-    } catch (error) {
-      console.error("Error deleting Zcash config:", error);
+    } catch {
       toast({
         title: "Error",
-        description: "Failed to delete Zcash configuration. Please try again.",
+        description: "Failed to delete configuration.",
         variant: "destructive",
       });
     } finally {
@@ -168,7 +326,6 @@ export function GlobalSettingsModal({
 
   const handleEditConfig = async () => {
     if (!selectedConfig) return;
-
     setIsUpdating(true);
     try {
       await updateZcashParams(selectedConfig.accountName, {
@@ -176,18 +333,12 @@ export function GlobalSettingsModal({
         chain: editForm.chain,
         serverUrl: editForm.serverUrl,
       });
-
-      toast({
-        title: "Success",
-        description: "Zcash configuration updated successfully.",
-      });
-
+      toast({ title: "Success", description: "Configuration updated." });
       setIsEditDialogOpen(false);
-    } catch (error) {
-      console.error("Error updating Zcash config:", error);
+    } catch {
       toast({
         title: "Error",
-        description: "Failed to update Zcash configuration. Please try again.",
+        description: "Failed to update configuration.",
         variant: "destructive",
       });
     } finally {
@@ -195,18 +346,19 @@ export function GlobalSettingsModal({
     }
   };
 
-  const handleSetDefault = async (config: ZcashParams) => {
+  const handleSetActive = async (config: ZcashParams) => {
     setIsSettingDefault(config.accountName);
     try {
-      await setDefaultWallet(config.accountName);
+      await setDefaultWallet(config.accountName, config.teamId ?? undefined);
+      setSelectedConfig(config);
       toast({
-        title: "Default wallet updated",
-        description: `"${config.accountName}" is now the default paying wallet.`,
+        title: "Active wallet updated",
+        description: `"${config.accountName}" is now the active wallet.`,
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
-        description: "Failed to set default wallet. Please try again.",
+        description: "Failed to set active wallet.",
         variant: "destructive",
       });
     } finally {
@@ -217,216 +369,217 @@ export function GlobalSettingsModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex flex-col sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="flex flex-col w-full sm:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-              <Server className="w-6 h-6" />
-              Global Settings
-            </DialogTitle>
-            <DialogDescription>
-              Configure and manage your Zcash network settings
-            </DialogDescription>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <DialogTitle className="text-base sm:text-lg font-medium flex items-center gap-2">
+                  <Server className="w-4 h-4 text-muted-foreground shrink-0" />
+                  Global settings
+                </DialogTitle>
+                <DialogDescription className="mt-0.5 text-xs sm:text-sm">
+                  Manage Zcash wallet configurations
+                </DialogDescription>
+              </div>
+              <Button
+                onClick={() => setIsImportDialogOpen(true)}
+                size="sm"
+                className="gap-1.5 shrink-0 text-xs sm:text-sm h-8 sm:h-9 px-2.5 sm:px-3"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden xs:inline">Import wallet</span>
+                <span className="xs:hidden">Import</span>
+              </Button>
+            </div>
           </DialogHeader>
 
           {isLoading ? (
-            <div className="flex items-center justify-center py-8">
+            <div className="flex items-center justify-center py-10">
               <div className="text-center space-y-2">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
+                <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-primary mx-auto" />
                 <p className="text-sm text-muted-foreground">
                   Loading settings...
                 </p>
               </div>
             </div>
           ) : (
-            <div className="space-y-6">
-              {/* Import Wallet Button */}
-              <div className="flex justify-end">
-                <Button
-                  onClick={() => setIsImportDialogOpen(true)}
-                  className="gap-2"
-                >
-                  <Download className="w-4 h-4" />
-                  Import Wallet
-                </Button>
-              </div>
-
-              {/* Current Configuration Overview */}
-              {selectedConfig && (
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-muted/50 px-6 py-4 border-b">
-                    <h3 className="font-semibold flex items-center gap-2">
-                      <Server className="w-5 h-5" />
-                      Active Configuration
-                    </h3>
+            <div className="space-y-4 sm:space-y-5 pt-1">
+              {/* ── Active wallet banner ── */}
+              {selectedConfig ? (
+                <div>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Active wallet
+                    </span>
                   </div>
-                  <div className="p-6 space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                          Account Name
-                        </Label>
-                        <div className="text-slate-900 dark:text-slate-100 font-medium">
-                          {selectedConfig.accountName || "Unnamed Account"}
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                          Network
-                        </Label>
-                        <Badge
-                          variant="outline"
-                          className={
-                            selectedConfig.chain === "mainnet"
-                              ? "text-green-600 border-green-200 dark:text-green-400 dark:border-green-800"
-                              : "text-blue-600 border-blue-200 dark:text-blue-400 dark:border-blue-800"
-                          }
-                        >
-                          {selectedConfig.chain || "mainnet"}
-                        </Badge>
-                      </div>
-                      <div className="space-y-2 col-span-2">
-                        <Label className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                          Server URL
-                        </Label>
-                        <div className="text-sm text-slate-900 dark:text-slate-100 font-mono p-3 bg-slate-50 dark:bg-slate-800 rounded border">
-                          {selectedConfig.serverUrl || "https://zec.rocks:443"}
-                        </div>
-                      </div>
-                      <div className="space-y-2 col-span-2">
-                        <Label className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                          Wallet Address
-                        </Label>
-                        <div className="text-sm text-slate-900 dark:text-slate-100 font-mono p-3 bg-slate-50 dark:bg-slate-800 rounded border">
-                          {formatAddress(address || "")}
-                        </div>
-                      </div>
-                    </div>
 
-                    <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                  <div className="rounded-xl border border-border overflow-hidden">
+                    {/* Dark banner */}
+                    <div className="bg-primary px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
                       <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        <div className="w-9 h-9 rounded-full bg-white/15 dark:bg-background flex items-center justify-center text-sm font-medium text-white shrink-0">
+                          {activeInitials}
+                        </div>
                         <div>
-                          <p className="text-sm font-medium">
-                            Connection Status
+                          <p className="text-sm font-medium text-background">
+                            {selectedConfig.accountName || "Unnamed Account"}
                           </p>
-                          <p className="text-xs text-muted-foreground">
-                            Connected to{" "}
-                            {selectedConfig.chain === "mainnet"
-                              ? "Mainnet"
-                              : "Testnet"}
-                          </p>
+                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            {activeTeamName && (
+                              <span className="hidden imd:block text-xs px-1.5 py-0.5 rounded-full bg-violet-500/25 text-violet-300 dark:bg-violet-700/25 dark:text-violet-900">
+                                {activeTeamName}
+                              </span>
+                            )}
+                            <span
+                              className={`text-xs px-1.5 py-0.5 rounded-full ${
+                                selectedConfig.chain === "mainnet"
+                                  ? "bg-green-500/25 text-green-300 dark:bg-green-700/25 dark:text-green-900"
+                                  : "bg-blue-500/25 text-blue-300 dark:bg-blue-700/25 dark:text-blue-900"
+                              }`}
+                            >
+                              {selectedConfig.chain || "mainnet"}
+                            </span>
+                            <span className="hidden imd:block text-xs text-white/50 dark:text-black/50">
+                              {selectedConfig.serverUrl || "zec.rocks:443"}
+                            </span>
+                          </div>
                         </div>
                       </div>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleEditClick(selectedConfig)}
+                        className="bg-background dark:bg-background border-white/20 hover:bg-white/20 hover:text-white text-xs h-7 shrink-0"
                       >
                         <Edit className="w-3 h-3 mr-1" />
                         Edit
                       </Button>
                     </div>
+
+                    {/* Details grid — 1 col on mobile, 2 cols on sm+ */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-border">
+                      <div className="bg-background px-3 sm:px-4 py-2.5 sm:py-3">
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Account name
+                        </p>
+                        <p className="text-sm font-medium truncate">
+                          {selectedConfig.accountName || "Unnamed Account"}
+                        </p>
+                      </div>
+                      <div className="bg-background px-3 sm:px-4 py-2.5 sm:py-3">
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Network
+                        </p>
+                        <p
+                          className={`text-sm font-medium ${
+                            selectedConfig.chain === "mainnet"
+                              ? "text-green-600 dark:text-green-400"
+                              : "text-blue-600 dark:text-blue-400"
+                          }`}
+                        >
+                          {selectedConfig.chain === "mainnet"
+                            ? "Mainnet"
+                            : "Testnet"}
+                        </p>
+                      </div>
+                      <div className="bg-background px-3 sm:px-4 py-2.5 sm:py-3">
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Server URL
+                        </p>
+                        <p className="text-xs font-mono text-muted-foreground truncate">
+                          {selectedConfig.serverUrl || "https://zec.rocks:443"}
+                        </p>
+                      </div>
+                      <div className="bg-background px-3 sm:px-4 py-2.5 sm:py-3">
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Wallet address
+                        </p>
+                        <p className="text-xs font-mono text-muted-foreground truncate">
+                          {formatAddress(address || "")}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              )}
+              ) : null}
 
-              {/* All Configurations List */}
-              {zcashParams && zcashParams.length > 0 && (
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-muted/50 px-6 py-4 border-b">
-                    <h3 className="font-semibold flex items-center gap-2">
-                      <Wallet className="w-5 h-5" />
-                      All Configurations ({zcashParams.length})
-                    </h3>
+              {/* ── Personal wallets ── */}
+              {personalWallets.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-1.5 mb-2 pb-2 border-b border-border">
+                    <User className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Personal
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      · {personalWallets.length}
+                    </span>
                   </div>
-                  <div className="p-6 space-y-3">
-                    {zcashParams.map((config) => (
-                      <div
+                  <div className="space-y-1.5">
+                    {personalWallets.map((config) => (
+                      <WalletRow
                         key={config.id}
-                        className={`flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors ${
-                          config.isDefault
-                            ? "border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-950/20"
-                            : ""
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 flex-1">
-                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                            <Wallet className="w-5 h-5 text-primary" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium text-sm">
-                                {config.accountName || "Unnamed Account"}
-                              </p>
-                              {config.isDefault && (
-                                <Badge className="text-xs bg-green-100 text-green-700 border-green-200 dark:bg-green-900 dark:text-green-300 dark:border-green-700">
-                                  Default
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Badge
-                                variant="outline"
-                                className={`text-xs ${
-                                  config.chain === "mainnet"
-                                    ? "text-green-600 border-green-200 dark:text-green-400 dark:border-green-800"
-                                    : "text-blue-600 border-blue-200 dark:text-blue-400 dark:border-blue-800"
-                                }`}
-                              >
-                                {config.chain || "mainnet"}
-                              </Badge>
-                              <span className="hidden imd:flex text-xs text-muted-foreground font-mono truncate max-w-[200px]">
-                                {config.serverUrl || "https://zec.rocks:443"}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {!config.isDefault && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleSetDefault(config)}
-                              disabled={isSettingDefault === config.accountName}
-                              className="text-xs h-8"
-                            >
-                              {isSettingDefault === config.accountName ? (
-                                "Setting..."
-                              ) : (
-                                <>
-                                  <CheckCircle2 className="w-3 h-3 mr-1" />
-                                  Set Default
-                                </>
-                              )}
-                            </Button>
-                          )}
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => handleEditClick(config)}
-                            className="h-8 w-8"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => handleDeleteClick(config)}
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8"
-                            disabled={isUpdating}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
+                        config={config}
+                        isActive={config.id === selectedConfig?.id}
+                        isSettingDefault={isSettingDefault}
+                        isUpdating={isUpdating}
+                        onEdit={handleEditClick}
+                        onDelete={handleDeleteClick}
+                        onSetActive={handleSetActive}
+                      />
                     ))}
                   </div>
                 </div>
               )}
 
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button variant="outline" onClick={() => onOpenChange(false)}>
+              {/* ── Team wallets ── */}
+              {teamWallets.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-1.5 mb-2 pb-2 border-b border-border">
+                    <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Teams
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      · {teamWallets.length}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {teamWallets.map((config) => (
+                      <WalletRow
+                        key={config.id}
+                        config={config}
+                        isActive={config.id === selectedConfig?.id}
+                        isSettingDefault={isSettingDefault}
+                        isUpdating={isUpdating}
+                        onEdit={handleEditClick}
+                        onDelete={handleDeleteClick}
+                        onSetActive={handleSetActive}
+                        teamName={config.teamName}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Empty state ── */}
+              {personalWallets.length === 0 && teamWallets.length === 0 && (
+                <div className="border rounded-lg p-8 sm:p-10 text-center text-muted-foreground">
+                  <Wallet className="w-8 h-8 mx-auto mb-3 opacity-25" />
+                  <p className="text-sm">No wallets configured yet.</p>
+                  <p className="text-xs mt-1 opacity-70">
+                    Import a wallet to get started.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2 border-t border-border">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onOpenChange(false)}
+                >
                   Close
                 </Button>
               </div>
@@ -437,13 +590,13 @@ export function GlobalSettingsModal({
 
       {/* Edit Configuration Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="w-full max-w-[calc(100vw-2rem)] sm:max-w-md p-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle>Edit Zcash Configuration</DialogTitle>
+            <DialogTitle>Edit Zcash configuration</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="edit-account-name">Account Name</Label>
+              <Label htmlFor="edit-account-name">Account name</Label>
               <Input
                 id="edit-account-name"
                 value={editForm.accountName}
@@ -454,12 +607,13 @@ export function GlobalSettingsModal({
                   }))
                 }
                 placeholder="e.g., My Wallet"
+                className="mt-1.5"
               />
             </div>
             <div>
-              <Label htmlFor="edit-chain">Network Chain</Label>
+              <Label htmlFor="edit-chain">Network chain</Label>
               <Select value={editForm.chain} onValueChange={handleChainChange}>
-                <SelectTrigger>
+                <SelectTrigger className="mt-1.5">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -480,19 +634,25 @@ export function GlobalSettingsModal({
                   }))
                 }
                 placeholder="https://zec.rocks:443"
+                className="mt-1.5"
               />
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-col-reverse xs:flex-row justify-end gap-2 pt-1">
               <Button
                 variant="outline"
                 onClick={() => setIsEditDialogOpen(false)}
                 disabled={isUpdating}
+                className="w-full xs:w-auto"
               >
                 Cancel
               </Button>
-              <Button onClick={handleEditConfig} disabled={isUpdating}>
+              <Button
+                onClick={handleEditConfig}
+                disabled={isUpdating}
+                className="w-full xs:w-auto"
+              >
                 <CheckCircle2 className="w-4 h-4 mr-2" />
-                {isUpdating ? "Saving..." : "Save Changes"}
+                {isUpdating ? "Saving..." : "Save changes"}
               </Button>
             </div>
           </div>
@@ -504,11 +664,11 @@ export function GlobalSettingsModal({
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="w-full max-w-[calc(100vw-2rem)] sm:max-w-lg p-4 sm:p-6">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-destructive" />
-              Delete Zcash Configuration
+              <AlertTriangle className="w-5 h-5 text-destructive shrink-0" />
+              Delete Zcash configuration
             </AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete the configuration for{" "}
@@ -527,12 +687,17 @@ export function GlobalSettingsModal({
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isUpdating}>Cancel</AlertDialogCancel>
+          <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0">
+            <AlertDialogCancel
+              disabled={isUpdating}
+              className="w-full sm:w-auto mt-0"
+            >
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDelete}
               disabled={isUpdating}
-              className="bg-destructive hover:bg-destructive/90"
+              className="bg-destructive hover:bg-destructive/90 w-full sm:w-auto"
             >
               {isUpdating ? "Deleting..." : "Delete"}
             </AlertDialogAction>

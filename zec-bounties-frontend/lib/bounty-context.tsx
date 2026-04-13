@@ -9,6 +9,10 @@ import type {
   BountyApplication,
   WorkSubmission,
   ZcashParamsFormData,
+  ZcashParams,
+  Team,
+  TeamMember,
+  TeamWallet,
 } from "./types";
 import { backendUrl, backendWebSpocketUrl } from "./configENV";
 
@@ -17,21 +21,21 @@ interface BountyCategory {
   name: string;
 }
 
-interface ZcashParams {
-  id: number;
-  chain: string;
-  serverUrl: string;
-  accountName: string;
-  ownerId: string;
-  isDefault: boolean;
-  createdAt: string;
-  updatedAt: string;
-  owner?: {
-    id: string;
-    name: string;
-    email: string;
-  };
-}
+// interface ZcashParams {
+//   id: number;
+//   chain: string;
+//   serverUrl: string;
+//   accountName: string;
+//   ownerId: string;
+//   isDefault: boolean;
+//   createdAt: string;
+//   updatedAt: string;
+//   owner?: {
+//     id: string;
+//     name: string;
+//     email: string;
+//   };
+// }
 
 interface ImportWalletData {
   accountName: string;
@@ -221,10 +225,48 @@ interface BountyContextType {
     amount: number;
     memo?: string;
   }>;
-  setDefaultWallet: (accountName: string) => Promise<void>;
+  setDefaultWallet: (accountName: string, teamId?: string) => Promise<void>;
 
   fetchExportPayments: (from?: string, to?: string) => Promise<any[]>;
   updateUserOfac: (userId: string, ofacVerified: boolean) => Promise<void>;
+
+  // Teams
+  teams: Team[];
+  teamsLoading: boolean;
+  fetchTeams: () => Promise<void>;
+  createTeam: (data: { name: string; description?: string }) => Promise<Team>;
+  updateTeam: (
+    id: string,
+    data: { name?: string; description?: string },
+  ) => Promise<Team>;
+  deleteTeam: (id: string) => Promise<void>;
+  addTeamMembers: (
+    teamId: string,
+    userIds: string[],
+    role?: string,
+  ) => Promise<TeamMember[]>;
+  updateTeamMemberRole: (
+    teamId: string,
+    userId: string,
+    role: string,
+  ) => Promise<TeamMember>;
+  removeTeamMember: (teamId: string, userId: string) => Promise<void>;
+  createTeamWallet: (
+    teamId: string,
+    data: { accountName: string; chain?: string; serverUrl?: string },
+  ) => Promise<TeamWallet>;
+  importTeamWallet: (
+    teamId: string,
+    data: {
+      accountName: string;
+      seedPhrase: string;
+      chain?: string;
+      serverUrl?: string;
+      birthdayHeight?: number;
+    },
+  ) => Promise<TeamWallet>;
+  deleteTeamWallet: (teamId: string) => Promise<void>;
+  currentTeam: Team | null;
 }
 
 const BountyContext = createContext<BountyContextType | undefined>(undefined);
@@ -265,6 +307,8 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   const [paymentServerUrl, setPaymentServerUrl] = useState<string | undefined>(
     undefined,
   );
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [teamsLoading, setTeamsLoading] = useState(false);
 
   // Helper function to get auth headers
   const getAuthHeaders = () => {
@@ -596,36 +640,34 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const setDefaultWallet = async (accountName: string): Promise<void> => {
+  const setDefaultWallet = async (
+    accountName: string,
+    teamId?: string,
+  ): Promise<void> => {
     if (!currentUser || currentUser.role !== "ADMIN") {
       throw new Error("Only admins can set a default wallet");
     }
 
-    try {
-      const res = await fetch(
-        `${backendUrl}/api/zcash/params/${accountName}/set-default`,
-        {
-          method: "PATCH",
-          headers: getAuthHeaders(),
-        },
-      );
+    const res = await fetch(
+      `${backendUrl}/api/zcash/params/${accountName}/set-default`,
+      {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ teamId: teamId ?? null }),
+      },
+    );
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to set default wallet");
-      }
-
-      // Update local state — mark the new default, unmark all others
-      setZcashParams((prev) =>
-        prev.map((param) => ({
-          ...param,
-          isDefault: param.accountName === accountName,
-        })),
-      );
-    } catch (error) {
-      console.error("Failed to set default wallet:", error);
-      throw error;
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.error || "Failed to set default wallet");
     }
+
+    setZcashParams((prev) =>
+      prev.map((param) => ({
+        ...param,
+        isDefault: param.accountName === accountName,
+      })),
+    );
   };
 
   // Upsert Zcash params (create or update)
@@ -1068,7 +1110,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
 
       const data = await res.json();
       const nonAdminUsersData = data.filter(
-        (user: User) => user.role !== "ADMIN",
+        (user: User) => user.role === "CLIENT",
       );
       setUsers(data);
       setNonAdminUsers(nonAdminUsersData);
@@ -1130,6 +1172,8 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch(`${backendUrl}/api/bounties/all-applications`, {
         headers: getAuthHeaders(),
       });
+
+      console.log(res);
 
       if (!res.ok) throw new Error("Failed to fetch applications");
 
@@ -1281,6 +1325,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch(`${backendUrl}/api/transactions/balance`, {
         headers: getAuthHeaders(),
       });
+      console.log(res);
 
       if (res.ok) {
         const data = await res.json();
@@ -1348,6 +1393,225 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     return allApplications.find((app) => app.bountyId === bountyId) || null;
   };
 
+  const fetchTeams = async () => {
+    if (!currentUser || currentUser.role !== "ADMIN") return;
+    setTeamsLoading(true);
+    try {
+      const res = await fetch(`${backendUrl}/api/teams`, {
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error("Failed to fetch teams");
+      const data = await res.json();
+      setTeams(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Failed to fetch teams:", error);
+      setTeams([]);
+    } finally {
+      setTeamsLoading(false);
+    }
+  };
+
+  const createTeam = async (data: {
+    name: string;
+    description?: string;
+  }): Promise<Team> => {
+    if (!currentUser || currentUser.role !== "ADMIN")
+      throw new Error("Unauthorized");
+    const res = await fetch(`${backendUrl}/api/teams`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || "Failed to create team");
+    setTeams((prev) => [json, ...prev]);
+    return json;
+  };
+
+  const updateTeam = async (
+    id: string,
+    data: { name?: string; description?: string },
+  ): Promise<Team> => {
+    if (!currentUser || currentUser.role !== "ADMIN")
+      throw new Error("Unauthorized");
+    const res = await fetch(`${backendUrl}/api/teams/${id}`, {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || "Failed to update team");
+    setTeams((prev) => prev.map((t) => (t.id === id ? json : t)));
+    return json;
+  };
+
+  const deleteTeam = async (id: string): Promise<void> => {
+    if (!currentUser || currentUser.role !== "ADMIN")
+      throw new Error("Unauthorized");
+    const res = await fetch(`${backendUrl}/api/teams/${id}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const json = await res.json();
+      throw new Error(json.error || "Failed to delete team");
+    }
+    setTeams((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const addTeamMembers = async (
+    teamId: string,
+    userIds: string[],
+    role = "MEMBER",
+  ): Promise<TeamMember[]> => {
+    if (!currentUser || currentUser.role !== "ADMIN")
+      throw new Error("Unauthorized");
+    const res = await fetch(`${backendUrl}/api/teams/${teamId}/members`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ userIds, role }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || "Failed to add members");
+    const { members } = json;
+    setTeams((prev) =>
+      prev.map((t) => {
+        if (t.id !== teamId) return t;
+        const merged = [
+          ...t.members.filter(
+            (m) => !members.find((nm: TeamMember) => nm.userId === m.userId),
+          ),
+          ...members,
+        ];
+        return { ...t, members: merged };
+      }),
+    );
+    return members;
+  };
+
+  const updateTeamMemberRole = async (
+    teamId: string,
+    userId: string,
+    role: string,
+  ): Promise<TeamMember> => {
+    if (!currentUser || currentUser.role !== "ADMIN")
+      throw new Error("Unauthorized");
+    const res = await fetch(
+      `${backendUrl}/api/teams/${teamId}/members/${userId}`,
+      {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ role }),
+      },
+    );
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || "Failed to update role");
+    setTeams((prev) =>
+      prev.map((t) => {
+        if (t.id !== teamId) return t;
+        return {
+          ...t,
+          members: t.members.map((m) =>
+            m.userId === userId
+              ? { ...m, role: role as TeamMember["role"] }
+              : m,
+          ),
+        };
+      }),
+    );
+    return json;
+  };
+
+  const removeTeamMember = async (
+    teamId: string,
+    userId: string,
+  ): Promise<void> => {
+    if (!currentUser || currentUser.role !== "ADMIN")
+      throw new Error("Unauthorized");
+    const res = await fetch(
+      `${backendUrl}/api/teams/${teamId}/members/${userId}`,
+      {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      },
+    );
+    if (!res.ok) {
+      const json = await res.json();
+      throw new Error(json.error || "Failed to remove member");
+    }
+    setTeams((prev) =>
+      prev.map((t) =>
+        t.id !== teamId
+          ? t
+          : { ...t, members: t.members.filter((m) => m.userId !== userId) },
+      ),
+    );
+  };
+
+  const createTeamWallet = async (
+    teamId: string,
+    data: { accountName: string; chain?: string; serverUrl?: string },
+  ): Promise<TeamWallet> => {
+    if (!currentUser || currentUser.role !== "ADMIN")
+      throw new Error("Unauthorized");
+    const res = await fetch(`${backendUrl}/api/teams/${teamId}/wallet`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || "Failed to create wallet");
+    setTeams((prev) =>
+      prev.map((t) => (t.id !== teamId ? t : { ...t, wallet: json.wallet })),
+    );
+    return json.wallet;
+  };
+
+  const importTeamWallet = async (
+    teamId: string,
+    data: {
+      accountName: string;
+      seedPhrase: string;
+      chain?: string;
+      serverUrl?: string;
+      birthdayHeight?: number;
+    },
+  ): Promise<TeamWallet> => {
+    if (!currentUser || currentUser.role !== "ADMIN")
+      throw new Error("Unauthorized");
+    const res = await fetch(`${backendUrl}/api/teams/${teamId}/wallet/import`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || "Failed to import wallet");
+    setTeams((prev) =>
+      prev.map((t) => (t.id !== teamId ? t : { ...t, wallet: json.wallet })),
+    );
+    return json.wallet;
+  };
+
+  const deleteTeamWallet = async (teamId: string): Promise<void> => {
+    if (!currentUser || currentUser.role !== "ADMIN")
+      throw new Error("Unauthorized");
+    const res = await fetch(`${backendUrl}/api/teams/${teamId}/wallet`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const json = await res.json();
+      throw new Error(json.error || "Failed to delete wallet");
+    }
+    setTeams((prev) =>
+      prev.map((t) => (t.id !== teamId ? t : { ...t, wallet: null })),
+    );
+  };
+
+  const currentTeam =
+    teams.find((t) => t.members.some((m) => m.userId === currentUser?.id)) ??
+    null;
+
   // Initialize auth and fetch PUBLIC data
   useEffect(() => {
     const initializeAuth = async () => {
@@ -1386,10 +1650,12 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       fetchUserApplications();
       fetchAllUsersApplications();
       fetchZcashParams();
+      if (currentUser.role === "ADMIN") fetchTeams();
     } else {
       setApplications([]);
       setAllApplications([]);
       setZcashParams([]);
+      setTeams([]);
       setSyncStatus(null);
       setSyncStatusError(null);
     }
@@ -1415,7 +1681,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
 
       switch (msg.type) {
         case "new_bounty":
-          setBounties((prev) => [...prev, msg.payload]);
+          setBounties((prev) => [msg.payload, ...prev]);
           break;
 
         case "bounty_updated":
@@ -1584,6 +1850,78 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
 
         case "bounty_assignees_updated":
           fetchBounties();
+          break;
+
+        case "team_created":
+          setTeams((prev) => [msg.payload, ...prev]);
+          break;
+
+        case "team_updated":
+          setTeams((prev) =>
+            prev.map((t) => (t.id === msg.payload.id ? msg.payload : t)),
+          );
+          break;
+
+        case "team_deleted":
+          setTeams((prev) => prev.filter((t) => t.id !== msg.payload.id));
+          fetchZcashParams();
+          fetchTeams();
+          break;
+
+        case "team_members_updated":
+          setTeams((prev) =>
+            prev.map((t) => {
+              if (t.id !== msg.payload.teamId) return t;
+              const merged = [
+                ...t.members.filter(
+                  (m) =>
+                    !msg.payload.members.find(
+                      (nm: TeamMember) => nm.userId === m.userId,
+                    ),
+                ),
+                ...msg.payload.members,
+              ];
+              return { ...t, members: merged };
+            }),
+          );
+          // Re-fetch params in case team wallet was auto-assigned to new members
+          fetchZcashParams();
+          break;
+
+        case "team_member_removed":
+          setTeams((prev) =>
+            prev.map((t) =>
+              t.id !== msg.payload.teamId
+                ? t
+                : {
+                    ...t,
+                    members: t.members.filter(
+                      (m) => m.userId !== msg.payload.userId,
+                    ),
+                  },
+            ),
+          );
+          break;
+
+        case "team_wallet_created":
+        case "team_wallet_imported":
+          setTeams((prev) =>
+            prev.map((t) =>
+              t.id !== msg.payload.teamId
+                ? t
+                : { ...t, wallet: msg.payload.wallet },
+            ),
+          );
+          fetchZcashParams();
+          fetchTeams();
+          break;
+
+        case "team_wallet_deleted":
+          setTeams((prev) =>
+            prev.map((t) =>
+              t.id !== msg.payload.teamId ? t : { ...t, wallet: null },
+            ),
+          );
           break;
       }
     };
@@ -2067,6 +2405,19 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         setDefaultWallet,
         fetchExportPayments,
         updateUserOfac,
+        teams,
+        teamsLoading,
+        fetchTeams,
+        createTeam,
+        updateTeam,
+        deleteTeam,
+        addTeamMembers,
+        updateTeamMemberRole,
+        removeTeamMember,
+        createTeamWallet,
+        importTeamWallet,
+        deleteTeamWallet,
+        currentTeam,
       }}
     >
       {children}
