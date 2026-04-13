@@ -9,6 +9,7 @@ import type {
   BountyApplication,
   WorkSubmission,
   ZcashParamsFormData,
+  ZcashParams,
   Team,
   TeamMember,
   TeamWallet,
@@ -20,21 +21,21 @@ interface BountyCategory {
   name: string;
 }
 
-interface ZcashParams {
-  id: number;
-  chain: string;
-  serverUrl: string;
-  accountName: string;
-  ownerId: string;
-  isDefault: boolean;
-  createdAt: string;
-  updatedAt: string;
-  owner?: {
-    id: string;
-    name: string;
-    email: string;
-  };
-}
+// interface ZcashParams {
+//   id: number;
+//   chain: string;
+//   serverUrl: string;
+//   accountName: string;
+//   ownerId: string;
+//   isDefault: boolean;
+//   createdAt: string;
+//   updatedAt: string;
+//   owner?: {
+//     id: string;
+//     name: string;
+//     email: string;
+//   };
+// }
 
 interface ImportWalletData {
   accountName: string;
@@ -224,7 +225,7 @@ interface BountyContextType {
     amount: number;
     memo?: string;
   }>;
-  setDefaultWallet: (accountName: string) => Promise<void>;
+  setDefaultWallet: (accountName: string, teamId?: string) => Promise<void>;
 
   fetchExportPayments: (from?: string, to?: string) => Promise<any[]>;
   updateUserOfac: (userId: string, ofacVerified: boolean) => Promise<void>;
@@ -639,36 +640,34 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const setDefaultWallet = async (accountName: string): Promise<void> => {
+  const setDefaultWallet = async (
+    accountName: string,
+    teamId?: string,
+  ): Promise<void> => {
     if (!currentUser || currentUser.role !== "ADMIN") {
       throw new Error("Only admins can set a default wallet");
     }
 
-    try {
-      const res = await fetch(
-        `${backendUrl}/api/zcash/params/${accountName}/set-default`,
-        {
-          method: "PATCH",
-          headers: getAuthHeaders(),
-        },
-      );
+    const res = await fetch(
+      `${backendUrl}/api/zcash/params/${accountName}/set-default`,
+      {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ teamId: teamId ?? null }),
+      },
+    );
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to set default wallet");
-      }
-
-      // Update local state — mark the new default, unmark all others
-      setZcashParams((prev) =>
-        prev.map((param) => ({
-          ...param,
-          isDefault: param.accountName === accountName,
-        })),
-      );
-    } catch (error) {
-      console.error("Failed to set default wallet:", error);
-      throw error;
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.error || "Failed to set default wallet");
     }
+
+    setZcashParams((prev) =>
+      prev.map((param) => ({
+        ...param,
+        isDefault: param.accountName === accountName,
+      })),
+    );
   };
 
   // Upsert Zcash params (create or update)
@@ -1326,6 +1325,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch(`${backendUrl}/api/transactions/balance`, {
         headers: getAuthHeaders(),
       });
+      console.log(res);
 
       if (res.ok) {
         const data = await res.json();
@@ -1681,7 +1681,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
 
       switch (msg.type) {
         case "new_bounty":
-          setBounties((prev) => [...prev, msg.payload]);
+          setBounties((prev) => [msg.payload, ...prev]);
           break;
 
         case "bounty_updated":

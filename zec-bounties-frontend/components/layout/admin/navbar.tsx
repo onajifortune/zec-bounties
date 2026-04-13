@@ -50,8 +50,11 @@ import type { SyncStatus } from "@/lib/bounty-context";
 import { useRouter } from "next/navigation";
 
 function TeamIndicator() {
-  const { currentTeam } = useBounty();
+  const { currentTeam, zcashParams } = useBounty();
   if (!currentTeam) return null;
+
+  const defaultWallet = zcashParams?.find((p) => p.isDefault);
+  if (!defaultWallet?.isTeam) return null;
 
   const wallet = currentTeam.wallet;
 
@@ -60,9 +63,9 @@ function TeamIndicator() {
       <TooltipTrigger asChild>
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/60 border text-xs cursor-default">
           <Users className="h-3 w-3 text-primary shrink-0" />
-          <span className="text-primary font-medium max-w-[80px] truncate">
+          {/* <span className="text-primary font-medium max-w-[80px] truncate">
             {currentTeam.name}
-          </span>
+          </span> */}
         </div>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="text-xs space-y-1 max-w-[220px]">

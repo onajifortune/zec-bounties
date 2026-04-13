@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,16 @@ import {
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useBounty } from "@/lib/bounty-context";
-import { AlertTriangle, Wallet, CheckCircle, Info } from "lucide-react";
+import {
+  AlertTriangle,
+  Wallet,
+  CheckCircle,
+  Info,
+  Loader2,
+  XCircle,
+} from "lucide-react";
+
+type ValidationState = "idle" | "checking" | "valid" | "invalid";
 
 interface ZAddressCollectionModalProps {
   isOpen: boolean;
@@ -27,7 +36,11 @@ export function ZAddressCollectionModal({
   const [zAddress, setZAddress] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isVerified, setIsVerified] = useState<boolean | undefined>(true);
+  const [validationState, setValidationState] =
+    useState<ValidationState>("idle");
+
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestAddress = useRef<string>("");
 
   const { verifyZaddress } = useBounty();
 
@@ -37,24 +50,90 @@ export function ZAddressCollectionModal({
       setZAddress("");
       setError(null);
       setIsSubmitting(false);
+      setValidationState("idle");
     }
   }, [isOpen]);
 
-  // Validate Z-address format
-  const validateZAddress = async (
-    address: string,
-  ): Promise<boolean | undefined> => {
-    // Basic validation for Zcash shielded addresses
-    // Sapling addresses start with "zs1" and are 78 characters long
-    // Sprout addresses start with "zc" and are 95 characters long
-    // const saplingRegex = /^zs1[a-z0-9]{97}$/i;
-    // const sproutRegex = /^zc[a-z0-9]{93}$/i;
+  // Prevent escape key from closing
+  useEffect(() => {
+    if (isOpen) {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      };
+      document.addEventListener("keydown", handleKeyDown, true);
+      return () => document.removeEventListener("keydown", handleKeyDown, true);
+    }
+  }, [isOpen]);
 
-    const result = await verifyZaddress(address);
-    setIsVerified(result);
+  const validateAddress = async (address: string) => {
+    if (!address.trim()) {
+      setValidationState("idle");
+      return;
+    }
 
-    return result;
+    // Optimistic: flag obviously-wrong addresses immediately without a round-trip
+    // Zcash unified addresses start with "u1", sapling with "zs1", sprout with "zc"
+    const looksLikeZcash =
+      address.startsWith("utest") ||
+      address.startsWith("u1") ||
+      address.startsWith("zs1") ||
+      address.startsWith("zc");
+
+    if (!looksLikeZcash || address.length < 10) {
+      setValidationState("invalid");
+      return;
+    }
+
+    setValidationState("checking");
+
+    // Keep track of the latest address so stale responses are ignored
+    latestAddress.current = address;
+
+    try {
+      const result = await verifyZaddress(address.trim());
+      // Only apply if this response belongs to the most recent request
+      if (latestAddress.current === address) {
+        setValidationState(result ? "valid" : "invalid");
+      }
+    } catch {
+      if (latestAddress.current === address) {
+        setValidationState("invalid");
+      }
+    }
   };
+
+  const handleAddressChange = (value: string) => {
+    setZAddress(value);
+    setError(null);
+
+    // Clear any pending debounce
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    if (!value.trim()) {
+      setValidationState("idle");
+      return;
+    }
+
+    // Show "checking" almost immediately so the user knows something is happening
+    setValidationState("checking");
+
+    // Debounce the actual API call by 600 ms
+    debounceTimer.current = setTimeout(() => {
+      validateAddress(value);
+    }, 600);
+  };
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,7 +143,13 @@ export function ZAddressCollectionModal({
       return;
     }
 
-    if (!(await validateZAddress(zAddress.trim()))) {
+    if (validationState === "checking") {
+      // Wait for in-flight validation to finish — just show a message
+      setError("Address validation is still in progress, please wait.");
+      return;
+    }
+
+    if (validationState !== "valid") {
       setError("Please enter a valid Zcash shielded address");
       return;
     }
@@ -73,9 +158,7 @@ export function ZAddressCollectionModal({
     setError(null);
 
     try {
-      // Call the completion handler
       await onComplete(zAddress.trim());
-      // ✅ Reset submitting state after completion
       setIsSubmitting(false);
     } catch (err) {
       setError(
@@ -89,33 +172,58 @@ export function ZAddressCollectionModal({
 
   // Prevent closing the dialog
   const handleOpenChange = () => {
-    // Do nothing - this prevents the dialog from being closed
     return;
   };
 
-  // Prevent escape key from closing
-  useEffect(() => {
-    if (isOpen) {
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === "Escape") {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-      };
+  // ── Inline validation indicator ──────────────────────────────────────────
+  const ValidationIndicator = () => {
+    if (validationState === "idle") return null;
 
-      document.addEventListener("keydown", handleKeyDown, true);
-      return () => document.removeEventListener("keydown", handleKeyDown, true);
+    if (validationState === "checking") {
+      return (
+        <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mt-1">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          <span>Verifying address…</span>
+        </div>
+      );
     }
-  }, [isOpen]);
+
+    if (validationState === "valid") {
+      return (
+        <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+          <CheckCircle className="w-3.5 h-3.5" />
+          <span>Valid Zcash shielded address</span>
+        </div>
+      );
+    }
+
+    // invalid
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-red-500 dark:text-red-400 mt-1">
+        <XCircle className="w-3.5 h-3.5" />
+        <span>Invalid address — must start with utest, u1, zs1, or zc</span>
+      </div>
+    );
+  };
+
+  // Border colour driven by validation state
+  const inputBorderClass =
+    validationState === "valid"
+      ? "border-emerald-500 focus-visible:ring-emerald-500"
+      : validationState === "invalid"
+        ? "border-red-500 focus-visible:ring-red-500"
+        : validationState === "checking"
+          ? "border-yellow-400 focus-visible:ring-yellow-400"
+          : "";
+
+  const canSubmit = !isSubmitting && validationState === "valid";
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange} modal={true}>
       <DialogContent
         className="sm:max-w-md"
-        // Prevent clicking outside to close
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
-        // Remove the X close button
         showCloseButton={false}
       >
         <DialogHeader className="text-center">
@@ -136,8 +244,12 @@ export function ZAddressCollectionModal({
           <Alert className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20">
             <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             <AlertDescription className="text-blue-800 dark:text-blue-300">
-              Your Z-address is required to receive ZEC payments for completed
-              bounties. This ensures secure and private transactions.
+              {/* Your Z-address is required to receive ZEC payments for completed
+              bounties. This ensures secure and private transactions. */}
+
+              <p>
+                Kindly enter a valid <strong>TESTNET</strong> address
+              </p>
             </AlertDescription>
           </Alert>
 
@@ -145,23 +257,42 @@ export function ZAddressCollectionModal({
             <Label htmlFor="zaddress" className="text-sm font-medium">
               Zcash Shielded Address <span className="text-red-500">*</span>
             </Label>
-            <Input
-              id="zaddress"
-              type="text"
-              placeholder="u1......."
-              value={zAddress}
-              onChange={(e) => {
-                setZAddress(e.target.value);
-                setIsVerified(true);
-                setError(null);
-              }}
-              className="font-mono text-sm"
-              disabled={isSubmitting}
-              autoFocus
-            />
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Enter your Zcash shielded address
-            </p>
+
+            {/* Input with right-side icon */}
+            <div className="relative">
+              <Input
+                id="zaddress"
+                type="text"
+                placeholder="utest.......(testnet address)"
+                value={zAddress}
+                onChange={(e) => handleAddressChange(e.target.value)}
+                className={`font-mono text-sm pr-9 transition-colors ${inputBorderClass}`}
+                disabled={isSubmitting}
+                autoFocus
+              />
+
+              {/* Status icon inside the input */}
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                {validationState === "checking" && (
+                  <Loader2 className="w-4 h-4 text-yellow-500 animate-spin" />
+                )}
+                {validationState === "valid" && (
+                  <CheckCircle className="w-4 h-4 text-emerald-500" />
+                )}
+                {validationState === "invalid" && (
+                  <XCircle className="w-4 h-4 text-red-500" />
+                )}
+              </div>
+            </div>
+
+            {/* Inline feedback text */}
+            <ValidationIndicator />
+
+            {validationState === "idle" && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Enter your Zcash shielded address — we'll verify it as you type
+              </p>
+            )}
           </div>
 
           {error && (
@@ -174,13 +305,13 @@ export function ZAddressCollectionModal({
           <div className="space-y-3">
             <Button
               type="submit"
-              disabled={isSubmitting || !isVerified}
-              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+              disabled={!canSubmit}
+              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                  Saving...
+                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                  Saving…
                 </div>
               ) : (
                 <div className="flex items-center">
@@ -190,16 +321,16 @@ export function ZAddressCollectionModal({
               )}
             </Button>
 
-            {/* Help text */}
             <div className="text-center">
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Don't have a shielded address? Get one from your Zcash wallet app
+                Don't have a shielded address? Get one from your Zcash wallet
+                app
               </p>
             </div>
           </div>
         </form>
 
-        {/* Additional help section */}
+        {/* Help section */}
         <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
           <div className="space-y-2">
             <h4 className="text-sm font-medium text-slate-900 dark:text-slate-100">
@@ -208,7 +339,7 @@ export function ZAddressCollectionModal({
             <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
               <p>• Open your Zcash wallet (Zingo, Zkool, etc.)</p>
               <p>• Look for "Receive" or "Shielded Address"</p>
-              <p>• Copy the address that starts with a u1... </p>
+              <p>• Copy the address that starts with u1…</p>
               <p>• Paste it in the field above</p>
             </div>
           </div>

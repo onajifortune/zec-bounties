@@ -47,13 +47,13 @@ export interface Bounty {
   isApproved: boolean;
   isPaid: boolean;
   paymentAuthorized: boolean;
-  paymentScheduled?: PaymentSchedule; // Add this
-  paymentBatchId?: string; // Add this
-  paidAt?: Date; // Add this
-  paymentTxId?: string; // Add this
+  paymentScheduled?: PaymentSchedule;
+  paymentBatchId?: string;
+  paidAt?: Date;
+  paymentTxId?: string;
   createdByUser?: User; // Populated user data
   assigneeUser?: User; // Populated user data
-  applications?: BountyApplication[]; // Added applications array to track who applied
+  applications?: BountyApplication[];
   categoryId?: string;
   category?: BountyCategory;
   difficulty: "Easy" | "Medium" | "Hard";
@@ -81,6 +81,12 @@ export interface ZcashParams {
   serverUrl: string;
   accountName: string;
   ownerId: string;
+  /** Whether this is the active/default wallet used for payments */
+  isDefault: boolean;
+  /** True when this entry represents a shared team wallet */
+  isTeam: boolean;
+  /** The team this wallet belongs to, null for personal wallets */
+  teamId: string | null;
   createdAt: string;
   updatedAt: string;
   owner?: {
@@ -95,13 +101,12 @@ export interface PaymentSchedule {
   scheduledFor?: Date;
 }
 
-// New interface for work submissions
 export interface WorkSubmission {
   id: string;
   bountyId: string;
   submittedBy: string; // User ID
   description: string;
-  deliverableUrl?: string; // The main deliverable link
+  deliverableUrl?: string;
   submittedAt: Date;
   reviewedAt?: Date;
   reviewedBy?: string; // User ID

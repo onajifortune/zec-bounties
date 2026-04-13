@@ -32,18 +32,20 @@ interface EditBountyModalProps {
   bounty: Bounty | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  defaultSection?: "details" | "assignees";
 }
 
 export function EditBountyModal({
   bounty,
   open,
   onOpenChange,
+  defaultSection = "details",
 }: EditBountyModalProps) {
   const { updateBounty, nonAdminUsers } = useBounty();
 
   const [isSaving, setIsSaving] = useState(false);
   const [activeSection, setActiveSection] = useState<"details" | "assignees">(
-    "details",
+    defaultSection,
   );
 
   // Form fields
@@ -71,8 +73,9 @@ export function EditBountyModal({
     const existingIds = bounty.assignees?.map((a) => a.userId) ?? [];
     setSelectedUserIds(existingIds);
     setAssigneeSearch("");
-    setActiveSection("details");
-  }, [bounty, open]);
+    // Always honour the defaultSection when the modal (re-)opens
+    setActiveSection(defaultSection);
+  }, [bounty, open, defaultSection]);
 
   const toggleUser = (userId: string) => {
     setSelectedUserIds((prev) =>

@@ -105,6 +105,8 @@ export default function AdminDashboard() {
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [isFetchingTxHashes, setIsFetchingTxHashes] = useState(false);
   const [editingBounty, setEditingBounty] = useState<Bounty | null>(null);
+  const [assigneeSectionBounty, setAssigneeSectionBounty] =
+    useState<Bounty | null>(null);
   const [winnerBounty, setWinnerBounty] = useState<Bounty | null>(null);
 
   // Load all submissions on mount for the indicators
@@ -145,8 +147,21 @@ export default function AdminDashboard() {
 
     const assigneeCount = bounty.assignees?.length ?? 0;
 
-    // Add this check:
     if (assigneeCount === 0) {
+      // Allow if there's a legacy assigneeUser AND the bounty was created by a CLIENT
+      const createdByUser = bounty.createdByUser;
+      const hasLegacyAssignee = !!bounty.assigneeUser;
+      const createdByClient = createdByUser?.role === "CLIENT";
+
+      if (hasLegacyAssignee && createdByClient) {
+        try {
+          await updateBountyStatus(bountyId, "DONE");
+        } catch (err) {
+          console.error(err);
+        }
+        return;
+      }
+
       toast.error("Cannot mark as done", {
         description:
           "This bounty has no assignees. Assign at least one person before marking it done.",
@@ -464,7 +479,7 @@ export default function AdminDashboard() {
                                       ? "bg-blue-500"
                                       : bounty.status === "DONE"
                                         ? "bg-green-500"
-                                        : "bg-yellow-500"
+                                        : "bg-red-500"
                                 }`}
                               />
                               <span className="capitalize text-sm">
@@ -474,7 +489,10 @@ export default function AdminDashboard() {
                           </TableCell>
                           <TableCell>
                             {bounty.assignees && bounty.assignees.length > 0 ? (
-                              <div className="flex items-center gap-2">
+                              <button
+                                className="flex items-center gap-2 hover:opacity-75 transition-opacity"
+                                onClick={() => setAssigneeSectionBounty(bounty)}
+                              >
                                 {/* Stacked avatars */}
                                 <div className="flex items-center">
                                   {bounty.assignees.slice(0, 3).map((a, i) => (
@@ -512,10 +530,13 @@ export default function AdminDashboard() {
                                     ? bounty.assignees[0].user?.name
                                     : `${bounty.assignees.length} assignees`}
                                 </span>
-                              </div>
+                              </button>
                             ) : bounty.assignee && bounty.assigneeUser ? (
                               // Legacy single assignee fallback
-                              <div className="flex items-center gap-2">
+                              <button
+                                className="flex items-center gap-2 hover:opacity-75 transition-opacity"
+                                onClick={() => setAssigneeSectionBounty(bounty)}
+                              >
                                 <Avatar className="h-6 w-6 border">
                                   <AvatarImage
                                     src={
@@ -530,12 +551,13 @@ export default function AdminDashboard() {
                                 <span className="text-xs font-medium">
                                   {bounty.assigneeUser.name}
                                 </span>
-                              </div>
+                              </button>
                             ) : (
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 className="h-7 text-[10px] gap-1 px-2 border border-dashed"
+                                onClick={() => setAssigneeSectionBounty(bounty)}
                               >
                                 <UserPlus className="h-3 w-3" /> Assign
                               </Button>
@@ -758,11 +780,22 @@ export default function AdminDashboard() {
         )}
       </div>
 
+      {/* Opens on "details" tab — triggered by clicking the bounty title */}
       <EditBountyModal
         bounty={editingBounty}
         open={!!editingBounty}
         onOpenChange={(open) => {
           if (!open) setEditingBounty(null);
+        }}
+      />
+
+      {/* ── CHANGE D ── Opens on "assignees" tab — triggered by the Assign button */}
+      <EditBountyModal
+        bounty={assigneeSectionBounty}
+        open={!!assigneeSectionBounty}
+        defaultSection="assignees"
+        onOpenChange={(open) => {
+          if (!open) setAssigneeSectionBounty(null);
         }}
       />
 
