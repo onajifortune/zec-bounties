@@ -13,6 +13,7 @@ import {
   Filter,
   ArrowRight,
   Loader2,
+  ChevronsDown,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { NewBountyModal } from "@/components/new-bounty-modal";
@@ -56,7 +57,14 @@ const KANBAN_COLUMNS: {
 ];
 
 function HomeContent() {
-  const { bounties, currentUser, categories, bountiesLoading } = useBounty();
+  const {
+    bounties,
+    currentUser,
+    categories,
+    bountiesLoading,
+    loadMoreBounties,
+    hasMoreBounties,
+  } = useBounty();
   const router = useRouter();
   const [activeCategory, setActiveCategory] = useState("All");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -64,6 +72,7 @@ function HomeContent() {
   const [isNewBountyModalOpen, setIsNewBountyModalOpen] = useState(false);
   const [selectedBounty, setSelectedBounty] = useState<Bounty | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   // currentUser is guaranteed non-null here — ProtectedRoute handles the gate
   const displayCategories = ["All", ...categories.map((c) => c.name)];
@@ -100,6 +109,15 @@ function HomeContent() {
     name === "All"
       ? bounties.length
       : bounties.filter((b) => b.categoryId === name).length;
+
+  const handleLoadMore = async () => {
+    setIsLoadingMore(true);
+    try {
+      await loadMoreBounties();
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -189,10 +207,32 @@ function HomeContent() {
                 >
                   <List className="h-4 w-4" />
                 </Button>
+                {hasMoreBounties &&
+                  !searchQuery &&
+                  activeCategory === "All" && (
+                    <div className="relative group">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={handleLoadMore}
+                        disabled={isLoadingMore || bountiesLoading}
+                      >
+                        {isLoadingMore || bountiesLoading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <ChevronsDown className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <span className="pointer-events-none absolute right-0 top-full mt-1.5 whitespace-nowrap rounded-md bg-popover px-2 py-1 text-[11px] text-popover-foreground shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10">
+                        Load more
+                      </span>
+                    </div>
+                  )}
               </div>
             </div>
 
-            {bountiesLoading ? (
+            {bountiesLoading && bounties.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20">
                 <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
                 <p className="text-muted-foreground">Loading bounties...</p>
