@@ -114,7 +114,12 @@ interface BountyContextType {
   deleteBounty: (id: string) => Promise<void>;
   zAddressUpdate: (z_address: string) => Promise<boolean | undefined>;
   verifyZaddress: (z_address: string) => Promise<boolean | undefined>;
-  fetchBounties: () => Promise<void>;
+  fetchBounties: (reset?: boolean) => Promise<void>;
+  loadMoreBounties: () => Promise<void>;
+  hasMoreBounties: boolean;
+  bountiesPage: number;
+  totalBountyAmount: number;
+  totalBountyCount: number;
   fetchBountyById: (id: string) => Promise<Bounty | null>;
   fetchTransactionHashes: () => Promise<void>;
   applyToBounty: (bountyId: string, message: string) => Promise<void>;
@@ -292,6 +297,11 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   const [paymentIDs, setPaymentIDs] = useState<string[] | undefined>(undefined);
   const [categories, setCategories] = useState<BountyCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const BOUNTIES_PER_PAGE = 10;
+  const [bountiesPage, setBountiesPage] = useState(1);
+  const [hasMoreBounties, setHasMoreBounties] = useState(true);
+  const [totalBountyAmount, setTotalBountyAmount] = useState(0);
+  const [totalBountyCount, setTotalBountyCount] = useState(0);
   const [zcashParams, setZcashParams] = useState<ZcashParams[]>([]);
   const [zcashParamsLoading, setZcashParamsLoading] = useState(false);
 
@@ -1614,7 +1624,12 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     const initializeAuth = async () => {
       const savedToken = localStorage.getItem("authToken");
 
-      await Promise.all([fetchBounties(), fetchUsers(), fetchCategories()]);
+      await Promise.all([
+        fetchBounties(),
+        fetchUsers(),
+        fetchCategories(),
+        fetchTotalStats(),
+      ]);
 
       if (savedToken) {
         try {
@@ -1964,21 +1979,62 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   }, [currentUser?.id]);
 
   // Fetch all bounties (PUBLIC)
-  const fetchBounties = async () => {
+  const fetchBounties = async (reset = true) => {
     setBountiesLoading(true);
     try {
-      const res = await fetch(`${backendUrl}/api/bounties`, {
-        headers: getPublicHeaders(),
-      });
+      const page = reset ? 1 : bountiesPage;
+      const res = await fetch(
+        `${backendUrl}/api/bounties?page=${page}&limit=${BOUNTIES_PER_PAGE}`,
+        { headers: getPublicHeaders() },
+      );
 
       if (!res.ok) throw new Error("Failed to fetch bounties");
 
       const data = await res.json();
-      setBounties(Array.isArray(data) ? data : (data.data ?? []));
+      const incoming: Bounty[] = Array.isArray(data) ? data : (data.data ?? []);
+      const total: number = data.total ?? incoming.length;
+
+      if (reset) {
+        setBounties(incoming);
+        setBountiesPage(2); // next load-more will fetch page 2
+      } else {
+        setBounties((prev) => {
+          const existingIds = new Set(prev.map((b) => b.id));
+          const fresh = incoming.filter((b) => !existingIds.has(b.id));
+          return [...prev, ...fresh];
+        });
+        setBountiesPage((p) => p + 1);
+      }
+
+      // If we got fewer than a full page, there's nothing more to load
+      setHasMoreBounties(
+        incoming.length === BOUNTIES_PER_PAGE &&
+          bounties.length + incoming.length < total,
+      );
     } catch (error) {
       console.error("Failed to fetch bounties:", error);
     } finally {
       setBountiesLoading(false);
+    }
+  };
+
+  /** Appends the next page of bounties to the existing list */
+  const loadMoreBounties = async () => {
+    if (!hasMoreBounties || bountiesLoading) return;
+    await fetchBounties(false);
+  };
+
+  const fetchTotalStats = async () => {
+    try {
+      const res = await fetch(`${backendUrl}/api/bounties/stats/totals`, {
+        headers: getPublicHeaders(),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setTotalBountyAmount(data.totalBountyAmount ?? 0);
+      setTotalBountyCount(data.totalBountyCount ?? 0);
+    } catch (error) {
+      console.error("Failed to fetch bounty stats:", error);
     }
   };
 
@@ -2184,7 +2240,12 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
 
       setCurrentUser(data.user);
 
-      await Promise.all([fetchBounties(), fetchUsers(), fetchCategories()]);
+      await Promise.all([
+        fetchBounties(),
+        fetchUsers(),
+        fetchCategories(),
+        fetchTotalStats(),
+      ]);
 
       return { success: true, user: data.user };
     } catch (err) {
@@ -2379,6 +2440,11 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         authorizeDuePayment,
         deleteBounty,
         fetchBounties,
+        loadMoreBounties,
+        hasMoreBounties,
+        bountiesPage,
+        totalBountyAmount,
+        totalBountyCount,
         fetchBountyById,
         applyToBounty,
         editBounty,

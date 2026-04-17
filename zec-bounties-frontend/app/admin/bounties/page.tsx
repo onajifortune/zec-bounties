@@ -14,6 +14,7 @@ import {
   ArrowRight,
   Check,
   X,
+  Loader2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AdminBountyModal } from "@/components/admin-bounty-modal";
@@ -26,7 +27,15 @@ import { Input } from "@/components/ui/input";
 import { WalletGuard } from "@/components/settings/wallet-guard";
 
 export default function MarketplacePage() {
-  const { bounties, currentUser, categories, createCategory } = useBounty();
+  const {
+    bounties,
+    bountiesLoading,
+    hasMoreBounties,
+    loadMoreBounties,
+    currentUser,
+    categories,
+    createCategory,
+  } = useBounty();
   const [activeCategory, setActiveCategory] = useState("All");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
@@ -308,14 +317,25 @@ export default function MarketplacePage() {
               </div>
             )}
 
-            <div className="pt-8 flex justify-center">
-              <Button
-                variant="outline"
-                className="rounded-full px-8 bg-transparent"
-              >
-                Load More Bounties
-              </Button>
-            </div>
+            {hasMoreBounties && (
+              <div className="pt-8 flex justify-center">
+                <Button
+                  variant="outline"
+                  className="rounded-full px-8 bg-transparent"
+                  onClick={loadMoreBounties}
+                  disabled={bountiesLoading}
+                >
+                  {bountiesLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Loading…
+                    </>
+                  ) : (
+                    "Load More Bounties"
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>
