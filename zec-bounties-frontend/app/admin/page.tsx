@@ -76,6 +76,11 @@ export default function AdminDashboard() {
   const {
     bounties,
     nonAdminUsers,
+    totalBountyAmount,
+    totalBountyCount,
+    bountiesLoading,
+    hasMoreBounties,
+    loadMoreBounties,
     updateBountyStatus,
     updateBounty, // ← needed for winner stripping
     approveBounty,
@@ -275,7 +280,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const totalRewards = bounties.reduce((sum, b) => sum + b.bountyAmount, 0);
+  const totalRewards = totalBountyAmount;
   const activeBounties = bounties.filter(
     (b) => b.status === "TO_DO" || b.status === "IN_PROGRESS",
   ).length;
@@ -734,6 +739,31 @@ export default function AdminDashboard() {
                     })}
                   </TableBody>
                 </Table>
+
+                {/* Load More row */}
+                {hasMoreBounties && (
+                  <div className="flex justify-center p-4 border-t border-border">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-2 text-muted-foreground hover:text-foreground"
+                      onClick={loadMoreBounties}
+                      disabled={bountiesLoading}
+                    >
+                      {bountiesLoading ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Loading…
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5" />
+                          Load more bounties
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </>
