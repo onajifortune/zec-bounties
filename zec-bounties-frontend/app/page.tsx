@@ -6,7 +6,14 @@ import Link from "next/link";
 import { Navbar } from "@/components/layout/navbar";
 import { BountyCard } from "@/components/bounty-card";
 import { Button } from "@/components/ui/button";
-import { LayoutGrid, List, Filter, ArrowRight, Loader2 } from "lucide-react";
+import {
+  LayoutGrid,
+  List,
+  Filter,
+  ArrowRight,
+  Loader2,
+  ChevronsDown,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BountyDetailModal } from "@/components/bounty-detail-modal";
 import { Bounty } from "@/lib/types";
@@ -46,8 +53,15 @@ const KANBAN_COLUMNS: {
 ];
 
 export default function RootPage() {
-  const { bounties, currentUser, categories, bountiesLoading, isLoading } =
-    useBounty();
+  const {
+    bounties,
+    currentUser,
+    categories,
+    bountiesLoading,
+    isLoading,
+    loadMoreBounties,
+    hasMoreBounties,
+  } = useBounty();
   const router = useRouter();
 
   // Redirect logged-in users straight to /home
@@ -63,6 +77,7 @@ export default function RootPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBounty, setSelectedBounty] = useState<Bounty | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const displayCategories = ["All", ...categories.map((c) => c.name)];
 
@@ -98,6 +113,15 @@ export default function RootPage() {
     name === "All"
       ? bounties.length
       : bounties.filter((b) => b.categoryId === name).length;
+
+  const handleLoadMore = async () => {
+    setIsLoadingMore(true);
+    try {
+      await loadMoreBounties();
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   // While auth or bounties are loading, show spinner
   if (isLoading || bountiesLoading) {
@@ -191,6 +215,28 @@ export default function RootPage() {
                 >
                   <List className="h-4 w-4" />
                 </Button>
+                {hasMoreBounties &&
+                  !searchQuery &&
+                  activeCategory === "All" && (
+                    <div className="relative group">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={handleLoadMore}
+                        disabled={isLoadingMore || bountiesLoading}
+                      >
+                        {isLoadingMore || bountiesLoading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <ChevronsDown className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <span className="pointer-events-none absolute right-0 top-full mt-1.5 whitespace-nowrap rounded-md bg-popover px-2 py-1 text-[11px] text-popover-foreground shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10">
+                        Load more
+                      </span>
+                    </div>
+                  )}
               </div>
             </div>
 
