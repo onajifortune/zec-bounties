@@ -137,10 +137,16 @@ export function AuthorizePaymentPanel() {
             />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{bounty.title}</p>
-              <p className="text-xs text-muted-foreground truncate">
+              <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
                 {bounty.assigneeUser?.name ?? "Unknown assignee"}
-                {!bounty.assigneeUser?.z_address && (
-                  <span className="ml-1 text-yellow-600">· no z_address</span>
+                {bounty.assigneeUser?.z_address ? (
+                  <span className="text-green-600 flex items-center gap-0.5">
+                    <CheckCircle2 className="w-3 h-3" /> UA set
+                  </span>
+                ) : (
+                  <span className="text-yellow-600 flex items-center gap-0.5">
+                    <AlertTriangle className="w-3 h-3" /> no UA
+                  </span>
                 )}
               </p>
             </div>
