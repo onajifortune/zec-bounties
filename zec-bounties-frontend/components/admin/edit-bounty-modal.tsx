@@ -18,6 +18,7 @@ import {
   Search,
   X,
   CheckCircle2,
+  AlertTriangle,
   Users,
   Calendar,
   Coins,
@@ -314,6 +315,15 @@ export function EditBountyModal({
                           </p>
                           <p className="text-xs text-muted-foreground truncate">
                             {user.email}
+                            {user.z_address ? (
+                              <span className="text-green-600 flex items-center gap-0.5 shrink-0">
+                                <CheckCircle2 className="h-3 w-3" /> UA set
+                              </span>
+                            ) : (
+                              <span className="text-yellow-600 flex items-center gap-0.5 shrink-0">
+                                <AlertTriangle className="h-3 w-3" /> no UA
+                              </span>
+                            )}
                           </p>
                         </div>
                         <div
