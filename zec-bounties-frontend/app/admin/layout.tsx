@@ -1,14 +1,10 @@
-import { ProtectedRoute } from "@/components/auth/protected-route";
-import { WalletGuard } from "@/components/settings/wallet-guard";
+// app/admin/layout.tsx
+import { AdminGuard } from "@/components/auth/admin-guard";
 
 export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <ProtectedRoute requireAdmin={true}>
-      <WalletGuard>{children}</WalletGuard>
-    </ProtectedRoute>
-  );
+  return <AdminGuard>{children}</AdminGuard>;
 }
