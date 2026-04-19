@@ -249,6 +249,7 @@ export function AdminNavbar({
           <div className="flex items-center gap-2 font-bold text-xl tracking-tight mr-4 md:mr-6">
             <Link
               href="https://zechub.wiki"
+              prefetch
               target="_blank"
               className="transition-colors hover:text-primary"
             >
@@ -260,6 +261,7 @@ export function AdminNavbar({
             </Link>
             <Link
               href="/admin"
+              prefetch
               className="transition-colors hover:text-primary"
             >
               <span className="hidden sm:inline">ZEC Bounties</span>
@@ -270,6 +272,7 @@ export function AdminNavbar({
           <div className="hidden xl:flex items-center space-x-4 text-sm font-medium mr-auto">
             <Link
               href="/admin/dashboard"
+              prefetch
               className="transition-colors hover:text-primary"
             >
               Dashboard
@@ -288,6 +291,7 @@ export function AdminNavbar({
             </Link>
             <Link
               href="/admin/teams"
+              prefetch
               className="transition-colors hover:text-primary"
             >
               Teams
