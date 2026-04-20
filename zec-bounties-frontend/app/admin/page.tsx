@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AdminNavbar } from "@/components/layout/admin/navbar";
 import {
   Card,
@@ -88,6 +88,7 @@ export default function AdminDashboard() {
     acceptApplication,
     rejectApplication,
     fetchBountyApplications,
+    fetchAllSubmissions,
     fetchWorkSubmissions,
     reviewWorkSubmission,
     paymentIDs,
@@ -117,29 +118,14 @@ export default function AdminDashboard() {
     useState<Bounty | null>(null);
   const [winnerBounty, setWinnerBounty] = useState<Bounty | null>(null);
 
-  // Load all submissions on mount for the indicators
-  useEffect(() => {
-    const loadAllSubmissions = async () => {
-      if (!currentUser) return;
-      const allSubs: WorkSubmission[] = [];
-      for (const bounty of bounties) {
-        try {
-          const subs = await fetchWorkSubmissions(bounty.id);
-          allSubs.push(...subs);
-        } catch (error) {
-          console.error(
-            `Failed to load submissions for bounty ${bounty.id}:`,
-            error,
-          );
-        }
-      }
-      setAllSubmissions(allSubs);
-    };
+  const hasFetchedSubmissions = useRef(false);
 
-    if (bounties.length > 0 && currentUser) {
-      loadAllSubmissions();
-    }
-  }, [bounties, fetchWorkSubmissions, currentUser]);
+  useEffect(() => {
+    if (!currentUser || bounties.length === 0) return;
+    if (hasFetchedSubmissions.current) return;
+    hasFetchedSubmissions.current = true;
+    fetchAllSubmissions().then(setAllSubmissions);
+  }, [bounties.length, currentUser]);
 
   const handleStatusChange = async (
     bountyId: string,
@@ -469,9 +455,21 @@ export default function AdminDashboard() {
                         >
                           <TableCell className="font-medium py-4">
                             <div className="flex items-center gap-3">
-                              <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
-                                {bounty.createdByUser?.name?.[0] ?? "?"}
-                              </div>
+                              <Button
+                                variant="ghost"
+                                className="relative h-8 w-8 rounded-full"
+                              >
+                                <Avatar className="h-8 w-8">
+                                  <AvatarImage
+                                    src={
+                                      currentUser?.avatar ||
+                                      "/abstract-geometric-shapes.png"
+                                    }
+                                    alt="User"
+                                  />
+                                  <AvatarFallback>JD</AvatarFallback>
+                                </Avatar>
+                              </Button>
                               <button
                                 className="line-clamp-1 text-left hover:underline hover:text-primary transition-colors"
                                 onClick={() => setEditingBounty(bounty)}

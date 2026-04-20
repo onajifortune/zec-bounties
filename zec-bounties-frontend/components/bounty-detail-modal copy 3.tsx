@@ -20,7 +20,6 @@ import {
   MessageSquare,
   CheckCircle2,
   Send,
-  UserCheck,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -31,142 +30,6 @@ interface BountyDetailModalProps {
   bounty: Bounty | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-/* ─── Shared small components ─── */
-
-function SideCard({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={`rounded-xl border bg-card p-3 shadow-sm ${className}`}>
-      {children}
-    </div>
-  );
-}
-
-function SideLabel({
-  icon: Icon,
-  text,
-}: {
-  icon: React.ElementType;
-  text: string;
-}) {
-  return (
-    <div className="flex items-center gap-1.5 mb-1.5">
-      <Icon className="h-3 w-3 text-muted-foreground" />
-      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-        {text}
-      </span>
-    </div>
-  );
-}
-
-/* ─── Collapsible assignees card ─── */
-const VISIBLE_COUNT = 4;
-
-function AssigneesCard({
-  assignees,
-  workSubmissions,
-  currentUserId,
-}: {
-  assignees: Array<{
-    userId: string;
-    user?: { name?: string; avatar?: string } | null;
-  }>;
-  workSubmissions: WorkSubmission[];
-  currentUserId?: string;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const overflow = assignees.length - VISIBLE_COUNT;
-
-  return (
-    <SideCard>
-      <SideLabel icon={UserCheck} text="Assigned To" />
-
-      {/* Collapsed: stacked avatars + count */}
-      {!expanded && (
-        <button
-          onClick={() => setExpanded(true)}
-          className="flex items-center gap-2.5 group w-full text-left mt-0.5"
-        >
-          <div className="flex -space-x-2 shrink-0">
-            {assignees.slice(0, VISIBLE_COUNT).map((a) => (
-              <Avatar key={a.userId} className="h-7 w-7 ring-2 ring-background">
-                <AvatarImage src={a.user?.avatar || "/placeholder-user.jpg"} />
-                <AvatarFallback className="text-[10px] font-semibold bg-muted">
-                  {a.user?.name?.[0] || "?"}
-                </AvatarFallback>
-              </Avatar>
-            ))}
-            {overflow > 0 && (
-              <div className="h-7 w-7 rounded-full ring-2 ring-background bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground shrink-0">
-                +{overflow}
-              </div>
-            )}
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-foreground">
-              {assignees.length} assignee{assignees.length !== 1 ? "s" : ""}
-            </p>
-            {overflow > 0 && (
-              <p className="text-[10px] text-muted-foreground group-hover:text-foreground transition-colors">
-                Tap to see all ↓
-              </p>
-            )}
-          </div>
-        </button>
-      )}
-
-      {/* Expanded: compact scrollable list */}
-      {expanded && (
-        <div className="mt-1">
-          <div className="space-y-0.5 max-h-48 overflow-y-auto pr-1">
-            {assignees.map((a) => {
-              const hasSubmitted = workSubmissions.some(
-                (s) => s.submittedBy === a.userId,
-              );
-              const isYou = a.userId === currentUserId;
-              return (
-                <div
-                  key={a.userId}
-                  className="flex items-center gap-2 py-1 px-1.5 rounded-lg hover:bg-muted/50 transition-colors"
-                >
-                  <Avatar className="h-6 w-6 shrink-0">
-                    <AvatarImage
-                      src={a.user?.avatar || "/placeholder-user.jpg"}
-                    />
-                    <AvatarFallback className="text-[10px] font-semibold bg-muted">
-                      {a.user?.name?.[0] || "?"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-xs truncate flex-1 min-w-0">
-                    {a.user?.name || "Unknown"}
-                    {isYou && (
-                      <span className="ml-1 text-muted-foreground">(you)</span>
-                    )}
-                  </span>
-                  {hasSubmitted && (
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <button
-            onClick={() => setExpanded(false)}
-            className="w-full text-center text-[11px] text-muted-foreground hover:text-foreground pt-2 transition-colors"
-          >
-            Collapse ↑
-          </button>
-        </div>
-      )}
-    </SideCard>
-  );
 }
 
 export function BountyDetailModal({
@@ -665,14 +528,50 @@ export function BountyDetailModal({
               </div>
             </div>
 
-            {/* Assignees — full width in both layouts */}
             {bounty.assignees && bounty.assignees.length > 0 && (
-              <div className="w-full">
-                <AssigneesCard
-                  assignees={bounty.assignees}
-                  workSubmissions={workSubmissions}
-                  currentUserId={currentUser?.id}
-                />
+              <div className="space-y-3 pt-4 border-t">
+                <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                  Assigned To
+                </h4>
+                <div className="space-y-2">
+                  {bounty.assignees.map((a) => {
+                    const hasSubmitted = workSubmissions.some(
+                      (s) => s.submittedBy === a.userId,
+                    );
+                    return (
+                      <div
+                        key={a.userId}
+                        className="flex items-center gap-3 p-3 rounded-lg border border-primary/20 bg-primary/5"
+                      >
+                        <Avatar className="h-8 w-8 border-2 border-primary/20">
+                          <AvatarImage
+                            src={a.user?.avatar || "/placeholder-user.jpg"}
+                          />
+                          <AvatarFallback>
+                            {a.user?.name?.[0] || "?"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-primary truncate">
+                            {a.user?.name || "Unknown"}
+                          </p>
+                          <div className="flex items-center gap-1.5">
+                            {a.userId === currentUser?.id && (
+                              <p className="text-[10px] text-muted-foreground">
+                                You
+                              </p>
+                            )}
+                            {hasSubmitted && (
+                              <span className="flex items-center gap-0.5 text-[10px] text-green-600 dark:text-green-400">
+                                <CheckCircle2 className="h-3 w-3" /> Submitted
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>

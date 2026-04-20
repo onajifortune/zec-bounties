@@ -119,6 +119,8 @@ function HomeContent() {
     }
   };
 
+  console.log(bounties);
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <Navbar searchQuery={searchQuery} onSearchChange={setSearchQuery} />
