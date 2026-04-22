@@ -1762,6 +1762,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
                 (app) => (app.id === msg.payload.id ? msg.payload : app),
               ),
             }));
+            fetchBounties();
             break;
 
           case "application_deleted":
