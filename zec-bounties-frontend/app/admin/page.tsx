@@ -70,6 +70,12 @@ import { useRoleGuard } from "@/hooks/use-role-guard";
 import { EditBountyModal } from "@/components/admin/edit-bounty-modal";
 import { SelectWinnerModal } from "@/components/admin/select-winner-modal";
 import { toast } from "sonner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export default function AdminDashboard() {
   useRoleGuard("ADMIN");
@@ -480,17 +486,26 @@ export default function AdminDashboard() {
                         >
                           <TableCell className="font-medium py-4">
                             <div className="flex items-center gap-3">
-                              <Avatar className="h-7 w-7 border">
-                                <AvatarImage
-                                  src={
-                                    bounty.createdByUser?.avatar ||
-                                    "/placeholder-user.jpg"
-                                  }
-                                />
-                                <AvatarFallback>
-                                  {bounty.createdByUser?.name?.[0] || "?"}
-                                </AvatarFallback>
-                              </Avatar>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Avatar className="h-7 w-7 border">
+                                      <AvatarImage
+                                        src={
+                                          bounty.createdByUser?.avatar ||
+                                          "/placeholder-user.jpg"
+                                        }
+                                      />
+                                      <AvatarFallback>
+                                        {bounty.createdByUser?.name?.[0] || "?"}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {bounty.createdByUser?.name || "Unknown"}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                               <button
                                 className="line-clamp-1 text-left hover:underline hover:text-primary transition-colors"
                                 onClick={() => setEditingBounty(bounty)}
