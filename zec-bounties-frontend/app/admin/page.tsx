@@ -480,9 +480,17 @@ export default function AdminDashboard() {
                         >
                           <TableCell className="font-medium py-4">
                             <div className="flex items-center gap-3">
-                              <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
-                                {bounty.createdByUser?.name?.[0] ?? "?"}
-                              </div>
+                              <Avatar className="h-7 w-7 border">
+                                <AvatarImage
+                                  src={
+                                    bounty.createdByUser?.avatar ||
+                                    "/placeholder-user.jpg"
+                                  }
+                                />
+                                <AvatarFallback>
+                                  {bounty.createdByUser?.name?.[0] || "?"}
+                                </AvatarFallback>
+                              </Avatar>
                               <button
                                 className="line-clamp-1 text-left hover:underline hover:text-primary transition-colors"
                                 onClick={() => setEditingBounty(bounty)}
