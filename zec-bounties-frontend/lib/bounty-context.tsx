@@ -1266,6 +1266,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       const bountyId = updatedApplication.bountyId;
 
       await fetchBountyApplications(bountyId);
+      await fetchBounties();
 
       return updatedApplication;
     } catch (error) {
