@@ -241,6 +241,17 @@ export default function AdminDashboard() {
         reviewNotes: reviewNotes,
       });
       await loadWorkSubmissions();
+
+      if (action === "approved") {
+        const allSubs: WorkSubmission[] = [];
+        for (const bounty of bounties) {
+          try {
+            const subs = await fetchWorkSubmissions(bounty.id);
+            allSubs.push(...subs);
+          } catch {}
+        }
+        setAllSubmissions(allSubs);
+      }
     } catch (error) {
       console.error("Failed to review submission:", error);
     } finally {

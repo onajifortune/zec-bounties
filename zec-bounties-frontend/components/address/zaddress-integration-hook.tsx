@@ -18,10 +18,10 @@ export function useZAddressCollection(): UseZAddressCollectionReturn {
 
   // Check if Z-address collection is needed when user changes
   useEffect(() => {
-    // ✅ Add delay to prevent brief flash during context loading
+    // Add delay to prevent brief flash during context loading
     const checkTimer = setTimeout(() => {
       if (currentUser !== null && currentUser !== undefined) {
-        // ✅ Additional check: only proceed if user data has stabilized
+        // Additional check: only proceed if user data has stabilized
         if (JSON.stringify(currentUser) === JSON.stringify(stableUser)) {
           // User data is stable, proceed with modal logic
           setHasUserLoaded(true);
@@ -55,7 +55,7 @@ export function useZAddressCollection(): UseZAddressCollectionReturn {
       // Call backend to update user's Z-address
       const result = await zAddressUpdate(zAddress);
 
-      // ✅ Close the modal after successful update
+      // Close the modal after successful update
       setShowZAddressModal(false);
     } catch (error) {
       console.error("Failed to update Z-address:", error);
