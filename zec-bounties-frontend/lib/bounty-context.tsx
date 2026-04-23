@@ -2390,27 +2390,11 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   // Populate user data in bounties
   const populatedBounties = useMemo(
     () =>
-      bounties.map((bounty) => {
-        const primaryAssigneeId =
-          bounty.assignee ?? bounty.assignees?.[0]?.userId ?? null;
-
-        return {
-          ...bounty,
-          createdByUser: users.find((u) => u.id === bounty.createdBy),
-          assigneeUser: primaryAssigneeId
-            ? nonAdminUsers.find((u) => u.id === primaryAssigneeId)
-            : undefined,
-          assignees: (bounty.assignees ?? []).flatMap((a) => {
-            const user = nonAdminUsers.find((u) => u.id === a.userId);
-            if (!user) return [];
-            return [{ ...a, user }];
-          }),
-          userApplication: applications.find(
-            (app) => app.bountyId === bounty.id,
-          ),
-        };
-      }),
-    [bounties, users, nonAdminUsers, applications],
+      bounties.map((bounty) => ({
+        ...bounty,
+        userApplication: applications.find((app) => app.bountyId === bounty.id),
+      })),
+    [bounties, applications],
   );
 
   return (
