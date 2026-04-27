@@ -1706,6 +1706,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         switch (msg.type) {
           case "new_bounty":
             setBounties((prev) => [msg.payload, ...prev]);
+            fetchBounties();
             break;
 
           case "bounty_updated":
