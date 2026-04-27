@@ -1704,7 +1704,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         const msg = JSON.parse(event.data);
 
         switch (msg.type) {
-          case "new_bounty":
+          case "new_bounties":
             setBounties((prev) => [msg.payload, ...prev]);
             fetchBounties();
             console.log("New Bounty");
