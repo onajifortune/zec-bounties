@@ -1998,8 +1998,6 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       const incoming: Bounty[] = Array.isArray(data) ? data : (data.data ?? []);
       const total: number = data.total ?? incoming.length;
 
-      console.log(incoming);
-
       if (reset) {
         setBounties(incoming);
         setBountiesPage(2); // next load-more will fetch page 2
