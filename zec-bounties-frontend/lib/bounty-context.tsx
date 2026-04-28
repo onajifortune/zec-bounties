@@ -1616,9 +1616,14 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  const currentTeam =
-    teams.find((t) => t.members.some((m) => m.userId === currentUser?.id)) ??
-    null;
+  const activeWallet =
+    zcashParams.find((p) => p.isDefault) ??
+    (zcashParams.length > 0 ? zcashParams[zcashParams.length - 1] : null);
+
+  const currentTeam: Team | null =
+    activeWallet?.isTeam && activeWallet.teamId
+      ? (teams.find((t) => t.id === activeWallet.teamId) ?? null)
+      : null;
 
   // Initialize auth and fetch PUBLIC data
   useEffect(() => {
@@ -1707,7 +1712,6 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
           case "new_bounties":
             setBounties((prev) => [msg.payload, ...prev]);
             fetchBounties();
-            console.log("New Bounty");
             break;
 
           case "bounty_updated":

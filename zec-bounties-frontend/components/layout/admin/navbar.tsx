@@ -10,7 +10,6 @@ import {
   Wallet,
   Menu,
   RefreshCw,
-  ScanLine,
   Activity,
   CheckCircle2,
   AlertCircle,
@@ -19,6 +18,7 @@ import {
   ShieldCheck,
   User,
   Users,
+  Building2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -48,57 +48,77 @@ import { WalletTopupModal } from "@/components/wallet-topup-modal";
 import { useBounty } from "@/lib/bounty-context";
 import type { SyncStatus } from "@/lib/bounty-context";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 
-function TeamIndicator() {
-  const { currentTeam, zcashParams } = useBounty();
-  if (!currentTeam) return null;
+// ── Active wallet type pill — always visible in the navbar ─────────────────
+//
+// This is the key addition: a persistent, coloured pill that shows whether the
+// active wallet is a Team or Personal wallet. It never hides. The user always
+// knows what context they are operating in.
+//
+function ActiveWalletTypePill() {
+  const { zcashParams, currentTeam } = useBounty();
+  if (!zcashParams || zcashParams.length === 0) return null;
 
-  const defaultWallet = zcashParams?.find((p) => p.isDefault);
-  if (!defaultWallet?.isTeam) return null;
+  const active =
+    zcashParams.find((p) => p.isDefault) ?? zcashParams[zcashParams.length - 1];
+  if (!active) return null;
 
-  const wallet = currentTeam.wallet;
+  const isTeam = !!(active.isTeam && active.teamId);
+  const teamName = isTeam && currentTeam ? currentTeam.name : null;
+  const accountLabel = active.accountName || "Wallet";
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/60 border text-xs cursor-default">
-          <Users className="h-3 w-3 text-primary shrink-0" />
-          {/* <span className="text-primary font-medium max-w-[80px] truncate">
-            {currentTeam.name}
-          </span> */}
+        <div
+          className={cn(
+            "flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-semibold cursor-default select-none transition-colors",
+            isTeam
+              ? "bg-violet-50 border-violet-200 text-violet-700 dark:bg-violet-950/50 dark:border-violet-800 dark:text-violet-300"
+              : "bg-sky-50 border-sky-200 text-sky-700 dark:bg-sky-950/50 dark:border-sky-800 dark:text-sky-300",
+          )}
+        >
+          {isTeam ? (
+            <Building2 className="h-3 w-3 shrink-0" />
+          ) : (
+            <User className="h-3 w-3 shrink-0" />
+          )}
+          <span className="hidden lg:inline">
+            {isTeam ? (teamName ?? "Team") : accountLabel}
+          </span>
+          <span
+            className={cn(
+              "hidden xl:inline text-[10px] font-normal px-1.5 py-0.5 rounded",
+              isTeam
+                ? "bg-violet-100 text-violet-600 dark:bg-violet-900 dark:text-violet-400"
+                : "bg-sky-100 text-sky-600 dark:bg-sky-900 dark:text-sky-400",
+            )}
+          >
+            {isTeam ? "Team wallet" : "Personal"}
+          </span>
         </div>
       </TooltipTrigger>
-      <TooltipContent side="bottom" className="text-xs space-y-1 max-w-[220px]">
-        <p className="font-semibold">{currentTeam.name}</p>
-        {currentTeam.description && (
-          <p className="text-muted-foreground">{currentTeam.description}</p>
-        )}
-        <p className="text-muted-foreground">
-          {currentTeam.members.length} member
-          {currentTeam.members.length !== 1 ? "s" : ""}
+      <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+        <p className="font-semibold mb-0.5">
+          {isTeam ? "Team wallet" : "Personal wallet"}
         </p>
-        {wallet ? (
-          <p className="text-muted-foreground font-mono">
-            {wallet.accountName} · {wallet.chain}
-          </p>
-        ) : (
-          <p className="text-muted-foreground/60 italic">
-            No wallet configured
-          </p>
-        )}
+        <p className="text-muted-foreground">{accountLabel}</p>
+        {teamName && <p className="text-muted-foreground">Team: {teamName}</p>}
+        <p className="text-muted-foreground capitalize">
+          {active.chain ?? "mainnet"}
+        </p>
       </TooltipContent>
     </Tooltip>
   );
 }
 
-// ── Sync status badge ─────────────────────────────────────────────────────────
+// ── Sync status badge ──────────────────────────────────────────────────────
 function SyncStatusBadge({ status }: { status: SyncStatus | null }) {
   if (!status) return null;
-
   const pct =
     status.percentage_total_blocks_scanned ||
     status.percentage_total_outputs_scanned;
-
   const done = pct === 100 || status.in_progress === false;
 
   return (
@@ -125,18 +145,15 @@ function SyncStatusBadge({ status }: { status: SyncStatus | null }) {
   );
 }
 
-// ── Role toggle button ────────────────────────────────────────────────────────
+// ── Role toggle ────────────────────────────────────────────────────────────
 function RoleToggleButton({ compact = false }: { compact?: boolean }) {
   const { currentUser, switchRole, isSwitchingRole } = useBounty();
   const router = useRouter();
-
   if (!currentUser?.isRobin) return null;
 
   const isAdmin = currentUser.role === "ADMIN";
-
   const handleSwitch = async () => {
     await switchRole();
-    // Redirect to the appropriate home page after role switch
     router.push(isAdmin ? "/home" : "/admin");
   };
 
@@ -193,6 +210,7 @@ function RoleToggleButton({ compact = false }: { compact?: boolean }) {
   );
 }
 
+// ── Main navbar ────────────────────────────────────────────────────────────
 export function AdminNavbar({
   isAdmin = true,
   searchQuery,
@@ -211,6 +229,7 @@ export function AdminNavbar({
   const {
     currentUser,
     currentTeam,
+    zcashParams,
     logout,
     balance,
     fetchBalance,
@@ -222,6 +241,14 @@ export function AdminNavbar({
     rescanWallet,
     rescanLoading,
   } = useBounty();
+
+  // Derive active wallet for mobile sheet
+  const activeWallet =
+    zcashParams?.find((p) => p.isDefault) ??
+    (zcashParams && zcashParams.length > 0
+      ? zcashParams[zcashParams.length - 1]
+      : null);
+  const activeIsTeam = !!(activeWallet?.isTeam && activeWallet?.teamId);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -255,7 +282,7 @@ export function AdminNavbar({
             >
               <img
                 src="ZecHubBlue.png"
-                alt="ZecHubBlue.png"
+                alt="ZecHub"
                 style={{ height: "3rem" }}
               />
             </Link>
@@ -268,7 +295,7 @@ export function AdminNavbar({
             </Link>
           </div>
 
-          {/* Desktop Navigation */}
+          {/* Desktop nav links */}
           <div className="hidden xl:flex items-center space-x-4 text-sm font-medium mr-auto">
             <Link
               href="/admin/dashboard"
@@ -298,22 +325,22 @@ export function AdminNavbar({
             </Link>
           </div>
 
-          {/* Desktop Right Side */}
-          <div className="hidden xl:flex items-center gap-1 ml-auto">
+          {/* Desktop right side */}
+          <div className="hidden xl:flex items-center gap-1.5 ml-auto">
             {/* Search */}
-            <div className="relative max-w-sm mr-2">
+            <div className="relative max-w-sm mr-1">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
                 placeholder="Search bounties..."
                 value={searchQuery}
                 onChange={(e) => onSearchChange?.(e.target.value)}
-                className="pl-8 h-9 w-[200px] lg:w-[300px] bg-muted/50 border-none focus-visible:ring-1"
+                className="pl-8 h-9 w-[180px] lg:w-[260px] bg-muted/50 border-none focus-visible:ring-1"
               />
             </div>
 
             <TooltipProvider delayDuration={300}>
-              {/* Sync / rescan status badges */}
+              {/* Sync / rescan status */}
               {syncStatus || syncStatusError ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -321,7 +348,7 @@ export function AdminNavbar({
                       {syncStatusError ? (
                         <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/60 border text-xs font-mono text-destructive">
                           <AlertCircle className="h-3 w-3 shrink-0" />
-                          <span className="hidden xl:inline">Error</span>
+                          <span>Error</span>
                         </div>
                       ) : (
                         <SyncStatusBadge status={syncStatus} />
@@ -342,7 +369,7 @@ export function AdminNavbar({
                   <TooltipTrigger asChild>
                     <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/60 border text-xs font-mono text-emerald-500">
                       <CheckCircle2 className="h-3 w-3 shrink-0" />
-                      <span className="hidden xl:inline">Rescan Success</span>
+                      <span>Rescan OK</span>
                     </div>
                   </TooltipTrigger>
                   <TooltipContent
@@ -356,16 +383,17 @@ export function AdminNavbar({
                 </Tooltip>
               ) : null}
 
-              {/* Wallet balance */}
+              {/* ── ACTIVE WALLET TYPE PILL — always visible ── */}
+              <ActiveWalletTypePill />
+
+              {/* Balance */}
               <Button
                 variant="ghost"
                 className="gap-2 h-9 text-xs font-mono"
                 onClick={() => setTopupOpen(true)}
               >
                 <Wallet className="h-4 w-4" />
-                {balance
-                  ? `${(balance / 1e8).toFixed(4)} ZEC`
-                  : `${(0.0).toFixed(4)} ZEC`}
+                {balance ? `${(balance / 1e8).toFixed(4)} ZEC` : `0.0000 ZEC`}
               </Button>
 
               {/* Refresh */}
@@ -379,7 +407,7 @@ export function AdminNavbar({
                     className="h-9 w-9"
                   >
                     <RefreshCw
-                      className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
+                      className={cn("w-4 h-4", isRefreshing && "animate-spin")}
                     />
                   </Button>
                 </TooltipTrigger>
@@ -432,13 +460,10 @@ export function AdminNavbar({
                 </TooltipContent>
               </Tooltip>
 
-              {/* ── Team indicator ── */}
-              <TeamIndicator />
-
-              {/* ── Role toggle (isRobin only) ── */}
+              {/* Role toggle */}
               <RoleToggleButton />
 
-              {/* Theme toggle */}
+              {/* Theme */}
               <Button
                 variant="ghost"
                 size="icon"
@@ -483,8 +508,29 @@ export function AdminNavbar({
             </TooltipProvider>
           </div>
 
-          {/* Mobile Right Side */}
+          {/* Mobile right side */}
           <div className="flex xl:hidden items-center gap-2 ml-auto">
+            {/* Mobile wallet type pill — compact, icon only on very small screens */}
+            {activeWallet && (
+              <div
+                className={cn(
+                  "flex items-center gap-1 px-2 py-1 rounded-md border text-xs font-semibold",
+                  activeIsTeam
+                    ? "bg-violet-50 border-violet-200 text-violet-700 dark:bg-violet-950/50 dark:border-violet-800 dark:text-violet-300"
+                    : "bg-sky-50 border-sky-200 text-sky-700 dark:bg-sky-950/50 dark:border-sky-800 dark:text-sky-300",
+                )}
+              >
+                {activeIsTeam ? (
+                  <Building2 className="h-3 w-3 shrink-0" />
+                ) : (
+                  <User className="h-3 w-3 shrink-0" />
+                )}
+                <span className="hidden sm:inline text-[11px]">
+                  {activeIsTeam ? "Team" : "Personal"}
+                </span>
+              </div>
+            )}
+
             <Button
               variant="ghost"
               size="icon"
@@ -519,35 +565,73 @@ export function AdminNavbar({
                     />
                   </div>
 
-                  <div className="flex flex-col gap-2">
-                    <Link
-                      href="/admin/dashboard"
-                      className="px-3 py-2 text-sm font-medium rounded-md hover:bg-accent transition-colors"
-                      onClick={() => setMobileMenuOpen(false)}
+                  {/* Active wallet type — prominent in mobile sheet */}
+                  {activeWallet && (
+                    <div
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-3 rounded-lg border",
+                        activeIsTeam
+                          ? "bg-violet-50 border-violet-200 dark:bg-violet-950/30 dark:border-violet-800"
+                          : "bg-sky-50 border-sky-200 dark:bg-sky-950/30 dark:border-sky-800",
+                      )}
                     >
-                      Dashboard
-                    </Link>
-                    <Link
-                      href="/admin/bounties"
-                      className="px-3 py-2 text-sm font-medium rounded-md hover:bg-accent transition-colors"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Bounties
-                    </Link>
-                    <Link
-                      href="/admin/export"
-                      className="px-3 py-2 text-sm font-medium rounded-md hover:bg-accent transition-colors"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Export
-                    </Link>
-                    <Link
-                      href="/admin/teams"
-                      className="px-3 py-2 text-sm font-medium rounded-md hover:bg-accent transition-colors"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Teams
-                    </Link>
+                      <div
+                        className={cn(
+                          "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                          activeIsTeam
+                            ? "bg-violet-100 dark:bg-violet-900"
+                            : "bg-sky-100 dark:bg-sky-900",
+                        )}
+                      >
+                        {activeIsTeam ? (
+                          <Building2 className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                        ) : (
+                          <User className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p
+                          className={cn(
+                            "text-xs font-semibold truncate",
+                            activeIsTeam
+                              ? "text-violet-700 dark:text-violet-300"
+                              : "text-sky-700 dark:text-sky-300",
+                          )}
+                        >
+                          {activeWallet.accountName || "Active wallet"}
+                        </p>
+                        <p
+                          className={cn(
+                            "text-[11px]",
+                            activeIsTeam
+                              ? "text-violet-500 dark:text-violet-400"
+                              : "text-sky-500 dark:text-sky-400",
+                          )}
+                        >
+                          {activeIsTeam
+                            ? `Team wallet · ${currentTeam?.name ?? "Team"}`
+                            : "Personal wallet"}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-1">
+                    {[
+                      { href: "/admin/dashboard", label: "Dashboard" },
+                      { href: "/admin/bounties", label: "Bounties" },
+                      { href: "/admin/export", label: "Export" },
+                      { href: "/admin/teams", label: "Teams" },
+                    ].map(({ href, label }) => (
+                      <Link
+                        key={href}
+                        href={href}
+                        className="px-3 py-2 text-sm font-medium rounded-md hover:bg-accent transition-colors"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        {label}
+                      </Link>
+                    ))}
                   </div>
 
                   <div className="border-t" />
@@ -568,20 +652,6 @@ export function AdminNavbar({
                     </div>
                   )}
 
-                  {rescanStatus && (
-                    <div className="px-1">
-                      <p className="text-xs text-muted-foreground mb-1.5">
-                        Rescan Status
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-emerald-500 font-mono">
-                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                        {typeof rescanStatus === "string"
-                          ? rescanStatus
-                          : JSON.stringify(rescanStatus)}
-                      </div>
-                    </div>
-                  )}
-
                   <Button
                     variant="outline"
                     className="gap-2 justify-start font-mono"
@@ -593,68 +663,52 @@ export function AdminNavbar({
                     <Wallet className="h-4 w-4" />
                     {balance
                       ? `${(balance / 1e8).toFixed(4)} ZEC`
-                      : `${(0.0).toFixed(4)} ZEC`}
+                      : `0.0000 ZEC`}
                   </Button>
 
-                  <div className="grid grid-cols-2 xl:flex gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <Button
                       variant="outline"
-                      className="gap-2 flex-1"
+                      className="gap-1.5 flex-1 text-xs"
                       onClick={handleRefresh}
                       disabled={isRefreshing}
                     >
                       <RefreshCw
-                        className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                        className={cn(
+                          "h-3.5 w-3.5",
+                          isRefreshing && "animate-spin",
+                        )}
                       />
                       Refresh
                     </Button>
                     <Button
                       variant="outline"
-                      className="gap-2 flex-1"
+                      className="gap-1.5 flex-1 text-xs"
                       onClick={handleSyncStatus}
                       disabled={isSyncing}
                     >
                       {isSyncing ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <Activity className="h-4 w-4" />
+                        <Activity className="h-3.5 w-3.5" />
                       )}
                       Sync
                     </Button>
                     <Button
                       variant="outline"
-                      className="gap-2 flex-1"
+                      className="gap-1.5 flex-1 text-xs"
                       onClick={rescanWallet}
                       disabled={rescanLoading}
                     >
                       {rescanLoading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <FolderSync className="h-4 w-4" />
+                        <FolderSync className="h-3.5 w-3.5" />
                       )}
                       Rescan
                     </Button>
                   </div>
 
-                  {/* ── Mobile team indicator ── */}
-                  {currentTeam && (
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted/60 border">
-                      <Users className="h-4 w-4 text-primary shrink-0" />
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-sm font-medium truncate">
-                          {currentTeam.name}
-                        </span>
-                        {currentTeam.wallet && (
-                          <span className="text-xs text-muted-foreground font-mono truncate">
-                            {currentTeam.wallet.accountName} ·{" "}
-                            {currentTeam.wallet.chain}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Mobile role toggle (isRobin only) ── */}
                   <RoleToggleButton compact />
 
                   <Button variant="outline" className="gap-2 justify-start">
@@ -675,23 +729,19 @@ export function AdminNavbar({
                       />
                       <AvatarFallback>JD</AvatarFallback>
                     </Avatar>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium">
-                        {currentUser?.name}
-                      </span>
-                    </div>
+                    <span className="text-sm font-medium">
+                      {currentUser?.name}
+                    </span>
                   </div>
 
-                  <div className="flex flex-col gap-1">
-                    <div className="border-t my-2" />
-                    <Button
-                      variant="ghost"
-                      className="justify-start text-destructive"
-                      asChild
-                    >
-                      <div onClick={logout}>Log out</div>
-                    </Button>
-                  </div>
+                  <div className="border-t" />
+                  <Button
+                    variant="ghost"
+                    className="justify-start text-destructive"
+                    asChild
+                  >
+                    <div onClick={logout}>Log out</div>
+                  </Button>
                 </div>
               </SheetContent>
             </Sheet>
