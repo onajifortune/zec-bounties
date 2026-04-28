@@ -283,7 +283,7 @@ export function AdminNavbar({
               <img
                 src="ZecHubBlue.png"
                 alt="ZecHub"
-                style={{ height: "3rem" }}
+                className="h-8 sam:h-10 md:h-12"
               />
             </Link>
             <Link
@@ -291,7 +291,9 @@ export function AdminNavbar({
               prefetch
               className="transition-colors hover:text-primary"
             >
-              <span className="hidden sm:inline">ZEC Bounties</span>
+              <span className="inline text-sm sam:text-base imd:text-2xl">
+                ZEC Bounties
+              </span>
             </Link>
           </div>
 
