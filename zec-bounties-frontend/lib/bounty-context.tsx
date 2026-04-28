@@ -414,7 +414,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         headers: getAuthHeaders(),
       });
 
-      if (!res.ok) throw new Error("Rescan failed");
+      if (!res.ok) throw new Error("Kindly import wallet again");
       setRescanStatus("Rescan Success");
     } catch (error) {
       console.error("Failed to rescan wallet:", error);
