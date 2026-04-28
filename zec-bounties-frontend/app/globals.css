@@ -76,6 +76,7 @@
 
 @theme {
   --breakpoint-sm: 300px;
+  --breakpoint-sam: 365px;
   --breakpoint-imd: 725px;
   --breakpoint-md: 768px;
   --breakpoint-lg: 976px;
