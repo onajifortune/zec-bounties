@@ -9,12 +9,18 @@ const cors = require("cors");
 const { handleWebSocket } = require("./middleware/websocket");
 const { WebSocketServer } = require("ws");
 const prisma = require("./prisma/client");
+const { connectRedis } = require("./config/redis");
 
 const app = express();
 const server = createServer(app);
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 
-app.use(cors({ origin: FRONTEND_URL, credentials: true }));
+const allowedOrigins = [
+  FRONTEND_URL,
+  "https://zec-bounties-frontend.vercel.app",
+];
+
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
 
 app.get("/", (req, res) => {
@@ -28,6 +34,7 @@ app.use("/auth", require("./routes/auth"));
 app.use("/api/bounties", require("./routes/bounties"));
 app.use("/api/transactions", require("./routes/transactions"));
 app.use("/api/zcash", require("./routes/zcash"));
+app.use("/api/teams", require("./routes/teams"));
 
 // WebSocket server
 const wss = new WebSocketServer({ server });
@@ -41,7 +48,8 @@ app.use((req, res, next) => {
 
 // Start server
 const PORT = process.env.PORT || 9001;
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
+  await connectRedis();
   console.log(`Server running on port ${PORT}`);
   console.log(`WebSocket endpoint: ws://localhost:${PORT}`);
 });

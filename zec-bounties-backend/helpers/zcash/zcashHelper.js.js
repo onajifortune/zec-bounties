@@ -17,7 +17,7 @@ async function getLatestZcashParams(ownerId) {
     orderBy: { createdAt: "desc" },
     select: {
       serverUrl: true,
-      chain: true, // needed for dataDir path AND for route logic
+      chain: true,
       accountName: true,
     },
   });
@@ -49,15 +49,17 @@ async function getLatestZcashParams(ownerId) {
  */
 async function getLatestZcashParamsForClient() {
   const params = await prisma.zcashParams.findFirst({
-    orderBy: { createdAt: "desc" }, // get the most recently created entry
+    orderBy: { createdAt: "desc" },
     select: {
       serverUrl: true,
       chain: true,
       accountName: true,
       ownerId: true,
-      // dataDir is still omitted as it's server-side only
     },
   });
+
+  if (!params) return null;
+
   params.dataDir = path.join(
     process.cwd(),
     "wallets",
@@ -66,7 +68,103 @@ async function getLatestZcashParamsForClient() {
     params.chain,
   );
 
-  return params; // { serverUrl, chain, accountName } or null if table is empty
+  return params; // { serverUrl, chain, accountName, ownerId, dataDir }
 }
 
-module.exports = { getLatestZcashParams, getLatestZcashParamsForClient };
+/**
+ * Fetch latest Zcash params where isTeam is false.
+ * Returns null if no individual (non-team) params exist.
+ *
+ * @returns {Promise<{ serverUrl: string, chain: string, accountName: string, ownerId: string, dataDir: string } | null>}
+ */
+async function getLatestZcashParamsForClientUser() {
+  const params = await prisma.zcashParams.findFirst({
+    where: { isTeam: false },
+    orderBy: { createdAt: "desc" },
+    select: {
+      serverUrl: true,
+      chain: true,
+      accountName: true,
+      ownerId: true,
+    },
+  });
+
+  if (!params) return null;
+
+  params.dataDir = path.join(
+    process.cwd(),
+    "wallets",
+    params.ownerId,
+    params.accountName,
+    params.chain,
+  );
+
+  return params; // { serverUrl, chain, accountName, ownerId, dataDir }
+}
+
+/**
+ * Fetch the default Zcash wallet params for a given user.
+ * Falls back to the most recently created params if no default is set.
+ * Returns null if the user has no params at all.
+ *
+ * @param {string} ownerId
+ * @returns {Promise<{ serverUrl: string, chain: string, accountName: string, dataDir: string, isDefault: boolean } | null>}
+ */
+async function getDefaultZcashParams(ownerId) {
+  if (!ownerId) throw new Error("ownerId is required");
+
+  let params = await prisma.zcashParams.findFirst({
+    where: { ownerId, isDefault: true },
+    select: {
+      serverUrl: true,
+      chain: true,
+      accountName: true,
+      isDefault: true,
+      isTeam: true,
+      teamId: true,
+    },
+  });
+
+  if (!params) {
+    params = await prisma.zcashParams.findFirst({
+      where: { ownerId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        serverUrl: true,
+        chain: true,
+        accountName: true,
+        isDefault: true,
+        isTeam: true,
+        teamId: true,
+      },
+    });
+  }
+
+  if (!params) return null;
+
+  params.dataDir =
+    params.isTeam && params.teamId
+      ? path.join(
+          process.cwd(),
+          "wallets",
+          `team:${params.teamId}`,
+          params.accountName,
+          params.chain,
+        )
+      : path.join(
+          process.cwd(),
+          "wallets",
+          ownerId,
+          params.accountName,
+          params.chain,
+        );
+
+  return params;
+}
+
+module.exports = {
+  getLatestZcashParams,
+  getLatestZcashParamsForClient,
+  getLatestZcashParamsForClientUser,
+  getDefaultZcashParams,
+};

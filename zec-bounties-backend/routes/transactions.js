@@ -1,6 +1,5 @@
 const express = require("express");
-const { PrismaClient } = require("@prisma/client");
-const prisma = new PrismaClient();
+const prisma = require("../prisma/client");
 const router = express.Router();
 const axios = require("axios");
 const { authenticate, isAdmin } = require("../middleware/auth");
@@ -16,37 +15,82 @@ const executeZingoCli = require("../utils/zingoLib.js");
 const executeZingoCliTransactions = require("../utils/zingoLibTransactions.js");
 const executeZingoCheckBalance = require("../utils/zingoLibCheckBalance.js");
 const executeZingoCliAddresses = require("../utils/zingoLibAddresses.js");
-const { getLatestZcashParams } = require("../helpers/zcash/zcashHelper.js.js");
+const {
+  getLatestZcashParams,
+  getDefaultZcashParams,
+} = require("../helpers/zcash/zcashHelper.js.js");
 const executeZingoParseAddress = require("../utils/zingoLibParseAddress.js");
 const executeZingoCliSync = require("../utils/zingoLibSync.js");
+const executeZingoCliRescan = require("../utils/zingoLibRescan.js");
+const executeZingoCliQuit = require("../utils/zingoLibQuit.js");
+const executeZingoCliBalance = require("../utils/zingoLibBalance.js");
 const { resolvePayingWallet } = require("../helpers/zcash/resolvePayingWallet");
 const { buildPaymentListGrouped } = require("../helpers/db-query");
+const { delCache, deleteCacheByPattern } = require("../utils/cache");
 
-const { sendRealtimeUpdate } = require("../middleware/websocket");
+const { sendRealtimeUpdate, sendToUser } = require("../middleware/websocket");
+
+const path = require("path");
+
+const invalidateBounty = async (bountyId) => {
+  await Promise.all([
+    delCache(`bounty:${bountyId}`),
+    deleteCacheByPattern("bounties:*"),
+  ]);
+};
 
 // List transactions (Admin)
 router.get("/", authenticate, isAdmin, async (req, res) => {
-  const params = await getLatestZcashParams(req.user.id);
+  const params = await getDefaultZcashParams(req.user.id);
   console.log(params);
-  const txs = await executeZingoCliTransactions("transactions", params);
+  const txs = await executeZingoCliTransactions(params);
 
-  // ✅ Broadcast transactions fetched
-  sendRealtimeUpdate(
-    "transactions_fetched",
-    { transactions: txs },
-    req.user.id,
-  );
+  // ✅ Send transactions only to the requesting admin
+  sendToUser(req.user.id, "transactions_fetched", { transactions: txs });
 
-  res.json(txs);
+  res.json({
+    transactions: txs,
+    chain: params?.chain,
+    serverUrl: params?.serverUrl,
+  });
+});
+
+router.get("/rescan", authenticate, isAdmin, async (req, res) => {
+  const params = await getDefaultZcashParams(req.user.id);
+  if (!params) {
+    await initZcashOnce((ownerId = req.user.id), (accountName = "Main"));
+  }
+  // await executeZingoCliQuit("quit", params);
+  await executeZingoCliRescan("rescan", params);
+
+  res.json("Rescan started");
+});
+
+router.get("/sync-status", authenticate, isAdmin, async (req, res) => {
+  const params = await getDefaultZcashParams(req.user.id);
+  if (!params) {
+    await initZcashOnce((ownerId = req.user.id), (accountName = "Main"));
+  }
+  const data = await executeZingoCliSync("sync status", params);
+  console.log("status", data);
+
+  const syncStatusJson = data;
+
+  // ✅ Send balance only to the requesting admin (not broadcast)
+  sendToUser(req.user.id, "sync_status", { data });
+
+  res.json(syncStatusJson);
 });
 
 router.get("/balance", authenticate, isAdmin, async (req, res) => {
-  const params = await getLatestZcashParams(req.user.id);
+  const params = await getDefaultZcashParams(req.user.id);
   if (!params) {
     await initZcashOnce((ownerId = req.user.id), (accountName = "Main"));
   }
   console.log(params);
-  const data = await executeZingoCheckBalance("balance", params);
+  const data = await executeZingoCliBalance("balance", params);
+
+  console.log("balance", data);
 
   let balance;
   if (params.chain === "testnet") {
@@ -55,8 +99,8 @@ router.get("/balance", authenticate, isAdmin, async (req, res) => {
     balance = data.confirmed_sapling_balance;
   }
 
-  // ✅ Broadcast balance fetched
-  sendRealtimeUpdate("balance_fetched", { balance }, req.user.id);
+  // ✅ Send balance only to the requesting admin (not broadcast)
+  sendToUser(req.user.id, "balance_fetched", { balance });
 
   res.json(balance);
 });
@@ -71,8 +115,8 @@ router.post("/accounts", authenticate, async (req, res) => {
   try {
     const params = await initZcashOnce(req.user.id, accountName);
 
-    // ✅ Broadcast account created
-    sendRealtimeUpdate("account_created", { accountName, params }, req.user.id);
+    // ✅ Send account created only to the requesting user
+    sendToUser(req.user.id, "account_created", { accountName, params });
 
     res.json({ message: `Account "${accountName}" initialized`, params });
   } catch (err) {
@@ -80,51 +124,26 @@ router.post("/accounts", authenticate, async (req, res) => {
   }
 });
 
-// List transactions (Admin)
+// List addresses (Admin)
 router.get("/addresses", authenticate, isAdmin, async (req, res) => {
-  const params = await getLatestZcashParams(req.user.id);
+  const params = await getDefaultZcashParams(req.user.id);
   const status = await executeZingoCliSync("sync status", params);
   console.log("status", status);
 
-  const addressesList = await executeZingoCliAddresses("addresses", params);
+  const addresses = await executeZingoCliAddresses("addresses", params);
 
   try {
-    const addresses = addressesList[0];
     const result = addresses.encoded_address;
+    console.log("addresses", result);
 
-    // ✅ Broadcast addresses fetched
-    sendRealtimeUpdate("addresses_fetched", { addresses }, req.user.id);
+    // ✅ Send addresses only to the requesting admin (not broadcast)
+    sendToUser(req.user.id, "addresses_fetched", { addresses });
 
     res.json(addresses);
   } catch {
     res.json("Error in the Address");
   }
 });
-
-// List transactions (Admin)
-// router.post("/authorize-payment", authenticate, isAdmin, async (req, res) => {
-//   const dueBounties = await findDueBounties();
-//   const { paymentList, totalZecAmount } = await buildPaymentList(dueBounties);
-//   const params = await getLatestZcashParams(req.user.id);
-//   console.log(params);
-//   const sendResult = await executeZingoQuickSend(paymentList, params);
-
-//   const result = sendResult[1];
-//   await updateDueBounties();
-
-//   // ✅ Broadcast payment authorized
-//   sendRealtimeUpdate(
-//     "payment_authorized",
-//     {
-//       result,
-//       totalZecAmount,
-//       bountyCount: dueBounties.length,
-//     },
-//     req.user.id,
-//   );
-
-//   res.json(result);
-// });
 
 router.post("/authorize-payment", authenticate, isAdmin, async (req, res) => {
   try {
@@ -151,6 +170,14 @@ router.post("/authorize-payment", authenticate, isAdmin, async (req, res) => {
       });
     }
 
+    adminWallet.dataDir = path.join(
+      process.cwd(),
+      "wallets",
+      req.user.id,
+      adminWallet.accountName,
+      adminWallet.chain,
+    );
+
     // Fetch the selected bounties with their assignees
     const bounties = await prisma.bounty.findMany({
       where: {
@@ -176,6 +203,8 @@ router.post("/authorize-payment", authenticate, isAdmin, async (req, res) => {
     // Build payment list, skipping any bounty whose assignee has no z_address
     const paymentList = [];
     const skipped = [];
+
+    console.log(bounties);
 
     for (const bounty of bounties) {
       if (!bounty.assigneeUser?.z_address) {
@@ -209,6 +238,17 @@ router.post("/authorize-payment", authenticate, isAdmin, async (req, res) => {
 
     // Execute payment
     const sendResult = await executeZingoQuickSend(paymentList, adminWallet);
+
+    if (sendResult.error) {
+      const errorMessage = sendResult.error || "Unknown payment error";
+      console.error("❌ Zingo payment error:", errorMessage);
+      return res.status(422).json({
+        success: false,
+        error: "Payment failed",
+        details: errorMessage,
+      });
+    }
+
     const txResult = sendResult[1];
 
     // Mark all successfully queued bounties as paid
@@ -221,13 +261,15 @@ router.post("/authorize-payment", authenticate, isAdmin, async (req, res) => {
         paidAt: new Date(),
       },
     });
+    await Promise.all(paidBountyIds.map((id) => invalidateBounty(id)));
 
     // Store transaction record
-    await storeTransactions(
-      txResult,
-      paymentList.reduce((sum, p) => sum + p.amount, 0),
-    );
+    // await storeTransactions(
+    //   txResult,
+    //   paymentList.reduce((sum, p) => sum + p.amount, 0),
+    // );
 
+    // ✅ Broadcast payment result to ALL admins (this is a shared event)
     sendRealtimeUpdate(
       "payment_authorized",
       {
@@ -237,7 +279,7 @@ router.post("/authorize-payment", authenticate, isAdmin, async (req, res) => {
         skipped,
         walletAccountName: adminWallet.accountName,
       },
-      req.user.id,
+      req.user.id, // exclude sender since they get the HTTP response
     );
 
     res.json({
@@ -336,8 +378,9 @@ router.post(
           ? JSON.parse(updatedBounty.paymentScheduled)
           : null,
       };
+      await invalidateBounty(bountyId);
 
-      // ✅ Broadcast payment authorized for specific bounty
+      // ✅ Broadcast bounty payment authorization to ALL (shared bounty state)
       sendRealtimeUpdate(
         "bounty_payment_authorized",
         responseData,
@@ -436,8 +479,9 @@ router.put(
           ? JSON.parse(updatedBounty.paymentScheduled)
           : null,
       };
+      await invalidateBounty(bountyId);
 
-      // ✅ Broadcast payment authorized for specific bounty
+      // ✅ Broadcast bounty payment authorization to ALL (shared bounty state)
       sendRealtimeUpdate(
         "bounty_payment_authorized",
         responseData,
@@ -515,7 +559,7 @@ router.post(
         zcashPayload: payments,
       };
 
-      // ✅ Broadcast batch payment processed
+      // ✅ Broadcast batch payment result to ALL admins (shared event)
       sendRealtimeUpdate("batch_payment_processed", result, req.user.id);
 
       res.json(result);
@@ -576,7 +620,7 @@ router.post(
         bountyId,
       };
 
-      // ✅ Broadcast instant payment processed
+      // ✅ Broadcast instant payment result to ALL admins (shared event)
       sendRealtimeUpdate("instant_payment_processed", result, req.user.id);
 
       res.json(result);
@@ -633,8 +677,9 @@ router.put("/:id/mark-paid", authenticate, isAdmin, async (req, res) => {
         },
       },
     });
+    await invalidateBounty(bountyId);
 
-    // ✅ Broadcast bounty marked as paid
+    // ✅ Broadcast bounty paid status to ALL (shared bounty state)
     sendRealtimeUpdate("bounty_marked_paid", updatedBounty, req.user.id);
 
     res.json(updatedBounty);
@@ -649,7 +694,8 @@ router.put("/:id/mark-paid", authenticate, isAdmin, async (req, res) => {
 
 // Pay bounty
 router.post("/pay/:bountyId", authenticate, isAdmin, async (req, res) => {
-  const bountyId = Number(req.params.bountyId);
+  const bountyId = req.params.bountyId;
+
   const bounty = await prisma.bounty.findUnique({
     where: { id: bountyId },
     include: { assignee: true },
@@ -690,8 +736,9 @@ router.post("/pay/:bountyId", authenticate, isAdmin, async (req, res) => {
         amountZec: bounty.bountyAmountZec,
       },
     });
+    await invalidateBounty(bountyId);
 
-    // ✅ Broadcast bounty paid
+    // ✅ Broadcast bounty paid to ALL admins (shared event)
     sendRealtimeUpdate(
       "bounty_paid",
       {
