@@ -43,7 +43,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { WalletTopupModal } from "@/components/wallet-topup-modal";
 import { useBounty } from "@/lib/bounty-context";
 import type { SyncStatus } from "@/lib/bounty-context";
@@ -225,6 +225,34 @@ export function AdminNavbar({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  const RESCAN_HIDE_MS = 0.5 * 60 * 1000; // 5 minutes
+
+  const [rescanHidden, setRescanHidden] = useState(() => {
+    try {
+      const ts = localStorage.getItem("walletImportedAt");
+      return !!ts && Date.now() - Number(ts) < RESCAN_HIDE_MS;
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      const ts = localStorage.getItem("walletImportedAt");
+      if (!ts) return;
+      const remaining = RESCAN_HIDE_MS - (Date.now() - Number(ts));
+      if (remaining <= 0) {
+        setRescanHidden(false);
+        return;
+      }
+      const timer = setTimeout(() => setRescanHidden(false), remaining);
+      return () => clearTimeout(timer);
+    } catch {
+      // localStorage unavailable — just show the button
+      setRescanHidden(false);
+    }
+  }, []);
 
   const {
     currentUser,
@@ -441,14 +469,18 @@ export function AdminNavbar({
               </Tooltip>
 
               {/* Rescan */}
+
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={rescanWallet}
-                    disabled={rescanLoading}
-                    className="h-9 w-9"
+                    disabled={rescanLoading || rescanHidden}
+                    className={cn(
+                      "h-9 w-9 transition-all duration-300",
+                      rescanHidden && "opacity-40 cursor-not-allowed",
+                    )}
                   >
                     {rescanLoading ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -458,7 +490,7 @@ export function AdminNavbar({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="text-xs">
-                  Rescan wallet
+                  {rescanHidden ? "Rescan available soon..." : "Rescan wallet"}
                 </TooltipContent>
               </Tooltip>
 
@@ -696,11 +728,15 @@ export function AdminNavbar({
                       )}
                       Sync
                     </Button>
+
                     <Button
                       variant="outline"
-                      className="gap-1.5 flex-1 text-xs"
+                      className={cn(
+                        "gap-1.5 flex-1 text-xs transition-all duration-300",
+                        rescanHidden && "opacity-40 cursor-not-allowed",
+                      )}
                       onClick={rescanWallet}
-                      disabled={rescanLoading}
+                      disabled={rescanLoading || rescanHidden}
                     >
                       {rescanLoading ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />

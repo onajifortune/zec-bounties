@@ -39,7 +39,7 @@ export function ImportWalletModal({
   onOpenChange,
   isRequired = false,
 }: ImportWalletModalProps) {
-  const { importWallet } = useBounty();
+  const { importWallet, fetchSyncStatus } = useBounty();
 
   const [isImporting, setIsImporting] = useState(false);
   const [showSeed, setShowSeed] = useState(false);
@@ -132,10 +132,15 @@ export function ImportWalletModal({
         });
 
         // Close modal after a delay
-        setTimeout(() => {
-          onOpenChange(false);
-          setImportStatus({ type: null, message: "" });
-        }, 2000);
+        localStorage.setItem("walletImportedAt", Date.now().toString());
+        window.location.reload();
+
+        // ✅ Auto-trigger sync status fetch immediately after import
+        try {
+          await fetchSyncStatus();
+        } catch {
+          // Non-fatal — can be retried manually via the sync button
+        }
       } else {
         setImportStatus({
           type: "error",
