@@ -2,16 +2,14 @@ const express = require("express");
 const axios = require("axios");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const { PrismaClient } = require("@prisma/client");
+const prisma = require("../prisma/client");
 const { authenticate, isAdmin } = require("../middleware/auth");
 const { verifyZaddress } = require("../helpers/db-query.js");
 const {
   getLatestZcashParams,
-  getLatestZcashParamsForClient,
+  getLatestZcashParamsForClientUser,
 } = require("../helpers/zcash/zcashHelper.js");
 // const { isSaplingZcashAddress } = require("../utils/zingolib/parseAddresses");
-
-const prisma = new PrismaClient();
 const router = express.Router();
 const SECRET = process.env.JWT_SECRET;
 
@@ -140,6 +138,8 @@ router.get("/verify", (req, res) => {
   }
 });
 
+// utest18jxt2wjaklhtny5hx8xp7036v0qpy76j0rcsczsw34prh2svs6qst5eumxm35k9lpf3efxf0rayhh2u85zspp7m7z5w6288n2vzzu5u8
+
 router.get("/me", async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: "No token" });
@@ -157,6 +157,7 @@ router.get("/me", async (req, res) => {
         role: true,
         avatar: true,
         z_address: true,
+        isRobin: true,
       },
     });
 
@@ -175,7 +176,7 @@ router.post("/verify-zaddress", authenticate, async (req, res) => {
     // Get params based on user role
     let params;
     if (req.user.role === "CLIENT") {
-      params = await getLatestZcashParamsForClient();
+      params = await getLatestZcashParamsForClientUser();
     } else {
       params = await getLatestZcashParams(req.user.id);
     }
@@ -203,7 +204,7 @@ router.get("/has-zcash-params", authenticate, async (req, res) => {
   try {
     let params;
     if (req.user.role === "CLIENT") {
-      params = await getLatestZcashParamsForClient();
+      params = await getLatestZcashParamsForClientUser();
     } else {
       params = await getLatestZcashParams(req.user.id);
     }
