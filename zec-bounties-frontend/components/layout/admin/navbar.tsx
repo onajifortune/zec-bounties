@@ -583,7 +583,10 @@ export function AdminNavbar({
                   <span className="sr-only">Toggle menu</span>
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-[300px] p-4">
+              <SheetContent
+                side="right"
+                className="w-[300px] p-4 overflow-y-auto"
+              >
                 <SheetHeader>
                   <SheetTitle>Admin Menu</SheetTitle>
                 </SheetHeader>
