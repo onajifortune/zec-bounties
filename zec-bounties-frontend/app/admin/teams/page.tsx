@@ -55,6 +55,7 @@ import {
   RefreshCw,
   Eye,
   EyeOff,
+  ArrowLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -106,7 +107,7 @@ function useTeamsApi() {
   };
 
   const api = useCallback(
-    async (path: string, options: RequestInit = {}): Promise<any> => {
+    async <T = any,>(path: string, options: RequestInit = {}): Promise<T> => {
       const res = await fetch(`${backendUrl}/api/teams${path}`, {
         ...options,
         headers: { ...getHeaders(), ...(options.headers || {}) },
@@ -144,12 +145,13 @@ function RoleBadge({ role }: { role: TeamMember["role"] }) {
 
   const Icon = cfg.icon;
   return (
-    <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cfg.class}`}
+    <Badge
+      variant="outline"
+      className={`gap-1 text-[10px] font-medium ${cfg.class}`}
     >
       <Icon className="h-2.5 w-2.5" />
       {cfg.label}
-    </span>
+    </Badge>
   );
 }
 
@@ -212,7 +214,7 @@ function TeamFormModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md rounded-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Building2 className="h-5 w-5" />
@@ -222,36 +224,40 @@ function TeamFormModal({
 
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <Label htmlFor="team-name">Team Name *</Label>
+            <Label>Team Name *</Label>
             <Input
-              id="team-name"
-              placeholder="e.g. Frontend Squad"
+              placeholder="e.g. Engineering"
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             />
           </div>
+
           <div className="space-y-1.5">
-            <Label htmlFor="team-desc">Description</Label>
+            <Label>Description</Label>
             <Textarea
-              id="team-desc"
-              placeholder="What does this team work on?"
               rows={3}
+              placeholder="Optional description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-row gap-2 sm:flex-row">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={loading}
+            className="flex-1 sm:flex-none"
           >
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={loading}>
+          <Button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="flex-1 sm:flex-none"
+          >
             {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {team ? "Save Changes" : "Create Team"}
           </Button>
@@ -281,7 +287,6 @@ function AddMembersModal({
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
 
-  // Reset state when modal closes
   useEffect(() => {
     if (!open) {
       setSelectedIds([]);
@@ -292,7 +297,7 @@ function AddMembersModal({
 
   const currentMemberIds = team.members.map((m) => m.userId);
   const available = users.filter(
-    (u) =>
+    (u: any) =>
       !currentMemberIds.includes(u.id) &&
       (u.name.toLowerCase().includes(search.toLowerCase()) ||
         u.email.toLowerCase().includes(search.toLowerCase())),
@@ -308,10 +313,13 @@ function AddMembersModal({
       return toast.error("Select at least one user");
     setLoading(true);
     try {
-      const { members } = await api(`/${team.id}/members`, {
-        method: "POST",
-        body: JSON.stringify({ userIds: selectedIds, role }),
-      });
+      const { members } = await api<{ members: TeamMember[] }>(
+        `/${team.id}/members`,
+        {
+          method: "POST",
+          body: JSON.stringify({ userIds: selectedIds, role }),
+        },
+      );
       toast.success(`Added ${members.length} member(s)`);
       onSuccess(members);
       onOpenChange(false);
@@ -324,7 +332,7 @@ function AddMembersModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg rounded-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5" />
@@ -333,7 +341,7 @@ function AddMembersModal({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Input
               placeholder="Search users..."
               value={search}
@@ -341,7 +349,7 @@ function AddMembersModal({
               className="flex-1"
             />
             <Select value={role} onValueChange={(v) => setRole(v as any)}>
-              <SelectTrigger className="w-32">
+              <SelectTrigger className="w-full sm:w-32">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -351,7 +359,7 @@ function AddMembersModal({
             </Select>
           </div>
 
-          <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
+          <div className="border rounded-lg divide-y max-h-56 sm:max-h-64 overflow-y-auto">
             {available.length === 0 ? (
               <div className="p-4 text-center text-sm text-muted-foreground">
                 {search
@@ -359,7 +367,7 @@ function AddMembersModal({
                   : "All users are already members"}
               </div>
             ) : (
-              available.map((user) => {
+              available.map((user: any) => {
                 const selected = selectedIds.includes(user.id);
                 return (
                   <button
@@ -406,17 +414,19 @@ function AddMembersModal({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-row gap-2 sm:flex-row">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={loading}
+            className="flex-1 sm:flex-none"
           >
             Cancel
           </Button>
           <Button
             onClick={handleAdd}
             disabled={loading || selectedIds.length === 0}
+            className="flex-1 sm:flex-none"
           >
             {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             Add {selectedIds.length > 0 ? `(${selectedIds.length})` : "Members"}
@@ -450,7 +460,6 @@ function TeamWalletModal({
   const [loading, setLoading] = useState(false);
   const [showSeed, setShowSeed] = useState(false);
 
-  // Reset all fields when modal closes
   useEffect(() => {
     if (!open) {
       setTab("new");
@@ -478,7 +487,7 @@ function TeamWalletModal({
         if (birthdayHeight) body.birthdayHeight = parseInt(birthdayHeight);
       }
 
-      const { wallet } = await api(endpoint, {
+      const { wallet } = await api<{ wallet: TeamWallet }>(endpoint, {
         method: "POST",
         body: JSON.stringify(body),
       });
@@ -497,7 +506,7 @@ function TeamWalletModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg rounded-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Wallet className="h-5 w-5" />
@@ -533,7 +542,7 @@ function TeamWalletModal({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Chain</Label>
                 <Select
@@ -571,7 +580,6 @@ function TeamWalletModal({
                 <div className="space-y-1.5">
                   <Label>Seed Phrase (24 words) *</Label>
                   <div className="relative">
-                    {/* Visible masked display — shown when hidden */}
                     {!showSeed && seedPhrase && (
                       <div className="absolute inset-0 z-10 flex items-center px-3 py-2 pointer-events-none">
                         <span className="text-sm tracking-[0.3em] text-foreground select-none break-all leading-relaxed">
@@ -625,15 +633,20 @@ function TeamWalletModal({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-row gap-2 sm:flex-row">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={loading}
+            className="flex-1 sm:flex-none"
           >
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={loading}>
+          <Button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="flex-1 sm:flex-none"
+          >
             {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {tab === "import" ? "Import Wallet" : "Create Wallet"}
           </Button>
@@ -649,10 +662,12 @@ function TeamDetailPanel({
   team,
   onUpdate,
   onDelete,
+  onBack,
 }: {
   team: Team;
   onUpdate: (updated: Team) => void;
   onDelete: (id: string) => void;
+  onBack?: () => void;
 }) {
   const { api } = useTeamsApi();
   const [addMembersOpen, setAddMembersOpen] = useState(false);
@@ -663,7 +678,6 @@ function TeamDetailPanel({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // ── Wallet balance ────────────────────────────────────────────────────────
   const [balance, setBalance] = useState<number | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
@@ -673,7 +687,7 @@ function TeamDetailPanel({
     setBalanceLoading(true);
     setBalanceError(null);
     try {
-      const data = await api(`/${team.id}/wallet/balance`);
+      const data = await api<{ balance: number }>(`/${team.id}/wallet/balance`);
       setBalance(data.balance ?? null);
     } catch (err: any) {
       setBalanceError(err.message);
@@ -682,7 +696,6 @@ function TeamDetailPanel({
     }
   }, [api, team.id, team.wallet]);
 
-  // Fetch balance whenever the team or its wallet changes
   useEffect(() => {
     if (team.wallet) {
       fetchBalance();
@@ -690,6 +703,7 @@ function TeamDetailPanel({
       setBalance(null);
       setBalanceError(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [team.id, team.wallet?.id]);
 
   const handleRemoveMember = async (userId: string) => {
@@ -754,11 +768,9 @@ function TeamDetailPanel({
     }
   };
 
-  // Called when wallet modal succeeds — update team state and immediately fetch balance
   const handleWalletCreated = (wallet: TeamWallet) => {
     const updated = { ...team, wallet };
     onUpdate(updated);
-    // Give the backend a moment to finish initializing, then fetch balance
     setTimeout(() => {
       setBalance(null);
       setBalanceError(null);
@@ -768,16 +780,36 @@ function TeamDetailPanel({
 
   return (
     <div className="flex flex-col h-full">
+      {/* Mobile-only back bar — sticky so it's always reachable */}
+      {onBack && (
+        <div className="sticky top-0 z-20 flex items-center justify-between gap-2 px-2 py-2 border-b bg-card/95 backdrop-blur md:hidden">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 gap-1.5 -ml-1 text-sm font-medium"
+            onClick={onBack}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Teams
+          </Button>
+          <span className="text-xs text-muted-foreground truncate max-w-[50%]">
+            {team.name}
+          </span>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="flex items-start justify-between p-6 border-b">
+      <div className="flex items-start justify-between p-4 sm:p-6 border-b">
         <div className="flex items-center gap-3">
-          <div className="h-12 w-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-xl font-bold text-primary">
+          <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-lg sm:text-xl font-bold text-primary shrink-0">
             {team.name[0]}
           </div>
           <div>
-            <h2 className="text-lg font-bold leading-tight">{team.name}</h2>
+            <h2 className="text-base sm:text-lg font-bold leading-tight">
+              {team.name}
+            </h2>
             {team.description && (
-              <p className="text-sm text-muted-foreground mt-0.5">
+              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 line-clamp-1">
                 {team.description}
               </p>
             )}
@@ -789,7 +821,7 @@ function TeamDetailPanel({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -840,8 +872,10 @@ function TeamDetailPanel({
             ).length,
           },
         ].map((s) => (
-          <div key={s.label} className="py-3 px-4">
-            <div className="text-lg font-bold">{s.value}</div>
+          <div key={s.label} className="py-2.5 sm:py-3 px-2 sm:px-4">
+            <div className="text-base sm:text-lg font-bold truncate">
+              {s.value}
+            </div>
             <div className="text-xs text-muted-foreground">{s.label}</div>
           </div>
         ))}
@@ -849,14 +883,14 @@ function TeamDetailPanel({
 
       {/* Wallet card */}
       {team.wallet && (
-        <div className="p-4 border-b space-y-2">
+        <div className="p-3 sm:p-4 border-b space-y-2">
           <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border">
             <Wallet className="h-4 w-4 text-muted-foreground shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium truncate">
                 {team.wallet.accountName}
               </div>
-              <div className="text-xs text-muted-foreground">
+              <div className="text-xs text-muted-foreground truncate">
                 {team.wallet.chain} · {team.wallet.serverUrl}
               </div>
             </div>
@@ -865,7 +899,6 @@ function TeamDetailPanel({
             </Badge>
           </div>
 
-          {/* Balance row — mirrors admin navbar pattern */}
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Balance</span>
@@ -921,7 +954,7 @@ function TeamDetailPanel({
             team.members.map((member) => (
               <div
                 key={member.id}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
+                className="flex items-center gap-2 sm:gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
               >
                 <Avatar className="h-8 w-8 shrink-0">
                   <AvatarImage src={member.user.avatar} />
@@ -930,7 +963,7 @@ function TeamDetailPanel({
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-sm font-medium truncate">
                       {member.user.name}
                     </span>
@@ -943,25 +976,30 @@ function TeamDetailPanel({
 
                 {member.role !== "OWNER" && (
                   <div className="flex items-center gap-1 shrink-0">
-                    <Select
-                      value={member.role}
-                      onValueChange={(v) =>
-                        handleRoleChange(member.userId, v as TeamMember["role"])
-                      }
-                      disabled={updatingRole === member.userId}
-                    >
-                      <SelectTrigger className="h-7 w-24 text-xs">
-                        {updatingRole === member.userId ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <SelectValue />
-                        )}
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ADMIN">Admin</SelectItem>
-                        <SelectItem value="MEMBER">Member</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="hidden sm:block">
+                      <Select
+                        value={member.role}
+                        onValueChange={(v) =>
+                          handleRoleChange(
+                            member.userId,
+                            v as TeamMember["role"],
+                          )
+                        }
+                        disabled={updatingRole === member.userId}
+                      >
+                        <SelectTrigger className="h-7 w-24 text-xs">
+                          {updatingRole === member.userId ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <SelectValue />
+                          )}
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ADMIN">Admin</SelectItem>
+                          <SelectItem value="MEMBER">Member</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
                     <Button
                       variant="ghost"
@@ -1016,9 +1054,8 @@ function TeamDetailPanel({
         onSuccess={handleWalletCreated}
       />
 
-      {/* Delete confirm dialog */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-sm rounded-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-5 w-5" />
@@ -1030,11 +1067,12 @@ function TeamDetailPanel({
             will permanently remove all members and the team wallet. This cannot
             be undone.
           </p>
-          <DialogFooter>
+          <DialogFooter className="flex-row gap-2 sm:flex-row">
             <Button
               variant="outline"
               onClick={() => setDeleteConfirmOpen(false)}
               disabled={deleteLoading}
+              className="flex-1 sm:flex-none"
             >
               Cancel
             </Button>
@@ -1042,6 +1080,7 @@ function TeamDetailPanel({
               variant="destructive"
               onClick={handleDeleteTeam}
               disabled={deleteLoading}
+              className="flex-1 sm:flex-none"
             >
               {deleteLoading && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -1066,6 +1105,7 @@ export default function AdminTeamsPage() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [mobileView, setMobileView] = useState<"list" | "detail">("list");
 
   const selectedTeam = teams.find((t) => t.id === selectedTeamId) || null;
 
@@ -1078,9 +1118,9 @@ export default function AdminTeamsPage() {
   const fetchTeams = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api("/");
+      const data = await api<Team[]>("/");
       setTeams(Array.isArray(data) ? data : []);
-    } catch (err: any) {
+    } catch {
       toast.error("Failed to load teams");
     } finally {
       setLoading(false);
@@ -1094,6 +1134,7 @@ export default function AdminTeamsPage() {
   const handleTeamCreated = (team: Team) => {
     setTeams((prev) => [team, ...prev]);
     setSelectedTeamId(team.id);
+    setMobileView("detail");
   };
 
   const handleTeamUpdated = (updated: Team) => {
@@ -1102,7 +1143,20 @@ export default function AdminTeamsPage() {
 
   const handleTeamDeleted = (id: string) => {
     setTeams((prev) => prev.filter((t) => t.id !== id));
-    if (selectedTeamId === id) setSelectedTeamId(null);
+    if (selectedTeamId === id) {
+      setSelectedTeamId(null);
+      setMobileView("list");
+    }
+  };
+
+  const handleSelectTeam = (id: string) => {
+    setSelectedTeamId(id);
+    setMobileView("detail");
+  };
+
+  const handleBack = () => {
+    setSelectedTeamId(null);
+    setMobileView("list");
   };
 
   return (
@@ -1111,8 +1165,13 @@ export default function AdminTeamsPage() {
         <AdminNavbar isAdmin />
 
         <div className="flex h-[calc(100vh-3.5rem)]">
-          {/* ── Sidebar: team list ── */}
-          <aside className="w-80 shrink-0 border-r flex flex-col bg-card/30">
+          {/* Sidebar: team list */}
+          <aside
+            className={`
+              w-full md:w-80 md:shrink-0 border-r flex flex-col bg-card/30
+              ${mobileView === "detail" ? "hidden md:flex" : "flex"}
+            `}
+          >
             <div className="p-4 border-b space-y-3">
               <div className="flex items-center justify-between">
                 <div>
@@ -1159,11 +1218,11 @@ export default function AdminTeamsPage() {
                   {filteredTeams.map((team) => (
                     <button
                       key={team.id}
-                      onClick={() => setSelectedTeamId(team.id)}
+                      onClick={() => handleSelectTeam(team.id)}
                       className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
                         selectedTeamId === team.id
                           ? "bg-primary/8 border-r-2 border-primary"
-                          : "hover:bg-muted/50"
+                          : "hover:bg-muted/50 active:bg-muted/70"
                       }`}
                     >
                       <div className="h-9 w-9 rounded-lg bg-muted border flex items-center justify-center text-sm font-bold shrink-0">
@@ -1199,14 +1258,20 @@ export default function AdminTeamsPage() {
             </div>
           </aside>
 
-          {/* ── Main: team detail ── */}
-          <div className="flex-1 overflow-hidden">
+          {/* Main: team detail */}
+          <div
+            className={`
+              flex-1 overflow-hidden
+              ${mobileView === "list" ? "hidden md:block" : "block"}
+            `}
+          >
             {selectedTeam ? (
               <TeamDetailPanel
                 key={selectedTeam.id}
                 team={selectedTeam}
                 onUpdate={handleTeamUpdated}
                 onDelete={handleTeamDeleted}
+                onBack={handleBack}
               />
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-center px-8">
