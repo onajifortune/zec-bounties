@@ -1,15 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import {
-  ArrowLeft,
   Plus,
   TrendingUp,
   Clock,
   CheckCircle,
   AlertCircle,
-  LayoutGrid,
-  List,
+  BarChart2,
+  Loader2,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { BountyCard } from "@/components/bounty-card";
@@ -20,9 +18,10 @@ import { ProtectedRoute } from "@/components/auth/protected-route";
 import { NewBountyModal } from "@/components/new-bounty-modal";
 import { useBounty } from "@/lib/bounty-context";
 import { BountyDetailModal } from "@/components/bounty-detail-modal";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Bounty } from "@/lib/types";
 import type { BountyStatus } from "@/lib/types";
+import { backendUrl } from "@/lib/configENV";
 
 const STATUS_COLUMNS: {
   status: BountyStatus;
@@ -56,48 +55,176 @@ const STATUS_COLUMNS: {
   },
 ];
 
+const MONTH_LABELS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+type ViewMode = "bounties" | "earnings";
+
+/** Check both the legacy scalar `assignee` field and the `assignees` join array. */
+function isAssignedToUser(bounty: Bounty, userId: string): boolean {
+  if (bounty.assignee === userId) return true;
+  const arr = (bounty as any).assignees;
+  if (Array.isArray(arr)) {
+    return arr.some((a: any) => a.userId === userId || a.user?.id === userId);
+  }
+  return false;
+}
+
 export default function MyBountiesPage() {
   const { bounties, currentUser } = useBounty();
   const [selectedBounty, setSelectedBounty] = useState<Bounty | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isNewBountyModalOpen, setIsNewBountyModalOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [viewMode, setViewMode] = useState<ViewMode>("bounties");
+  const [statusFilter, setStatusFilter] = useState<BountyStatus | "ALL">("ALL");
 
-  const userBounties = useMemo(
+  // Full dataset for earnings — fetched once, bypasses the 10-item pagination
+  const [allUserBounties, setAllUserBounties] = useState<Bounty[]>([]);
+  const [earningsLoading, setEarningsLoading] = useState(false);
+  const [earningsFetched, setEarningsFetched] = useState(false);
+  const [selectedMonthIdx, setSelectedMonthIdx] = useState<number | null>(null);
+
+  // Kanban / list use the already-loaded paginated bounties
+  const userBounties = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === "ADMIN") return bounties;
+    return bounties.filter(
+      (b) =>
+        b.createdBy === currentUser.id || isAssignedToUser(b, currentUser.id),
+    );
+  }, [bounties, currentUser]);
+
+  // Filtered bounties based on selected status pill
+  const visibleBounties = useMemo(
     () =>
-      currentUser?.role === "ADMIN"
-        ? bounties
-        : bounties.filter(
-            (b) =>
-              b.createdBy === currentUser?.id || b.assignee === currentUser?.id,
-          ),
-    [bounties, currentUser],
+      statusFilter === "ALL"
+        ? userBounties
+        : userBounties.filter((b) => b.status === statusFilter),
+    [userBounties, statusFilter],
   );
 
-  const columns = useMemo(
+  // Bounties grouped by status for the "ALL" view
+  const groupedBounties = useMemo(
     () =>
       STATUS_COLUMNS.map((col) => ({
         ...col,
-        bounties: userBounties.filter((b) => b.status === col.status),
+        bounties: visibleBounties.filter((b) => b.status === col.status),
       })),
-    [userBounties],
+    [visibleBounties],
   );
 
-  const stats = useMemo(
-    () => ({
-      totalRewards: userBounties
-        .filter((b) => b.status === "DONE")
-        .reduce((sum, b) => sum + b.bountyAmount, 0),
-      activeBounties: userBounties.filter((b) => b.status === "IN_PROGRESS")
-        .length,
-      completed: userBounties.filter((b) => b.status === "DONE").length,
-      totalApplications: userBounties.reduce(
-        (sum, b) => sum + (b.applications?.length || 0),
+  const stats = useMemo(() => {
+    const source = earningsFetched ? allUserBounties : userBounties;
+    const done = source.filter((b) => b.status === "DONE");
+    return {
+      totalRewards: done.reduce((sum, b) => sum + b.bountyAmount, 0),
+      activeBounties: source.filter((b) => b.status === "IN_PROGRESS").length,
+      completed: done.length,
+      totalApplications: source.reduce(
+        (sum, b) => sum + ((b as any).applications?.length || 0),
         0,
       ),
-    }),
-    [userBounties],
-  );
+    };
+  }, [userBounties, allUserBounties, earningsFetched]);
+
+  const fetchAllForEarnings = useCallback(async () => {
+    if (!currentUser || earningsFetched) return;
+    setEarningsLoading(true);
+
+    try {
+      const PAGE_SIZE = 50;
+      let page = 1;
+      let collected: Bounty[] = [];
+      let keepGoing = true;
+
+      while (keepGoing) {
+        const res = await fetch(
+          `${backendUrl}/api/bounties?page=${page}&limit=${PAGE_SIZE}`,
+        );
+        if (!res.ok) break;
+
+        const data = await res.json();
+        const items: Bounty[] = Array.isArray(data) ? data : (data.data ?? []);
+        const total: number = data.total ?? items.length;
+
+        collected = [...collected, ...items];
+        keepGoing = items.length === PAGE_SIZE && collected.length < total;
+        page++;
+      }
+
+      const mine =
+        currentUser.role === "ADMIN"
+          ? collected
+          : collected.filter(
+              (b) =>
+                b.createdBy === currentUser.id ||
+                isAssignedToUser(b, currentUser.id),
+            );
+
+      setAllUserBounties(mine);
+    } catch (err) {
+      console.error("Failed to fetch all bounties for earnings:", err);
+    } finally {
+      setEarningsLoading(false);
+      setEarningsFetched(true);
+    }
+  }, [currentUser, earningsFetched]);
+
+  useEffect(() => {
+    fetchAllForEarnings();
+  }, [fetchAllForEarnings]);
+
+  const monthlyEarnings = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const mapAmount: Record<number, number> = {};
+    const mapBounties: Record<number, Bounty[]> = {};
+    const source = earningsFetched ? allUserBounties : userBounties;
+
+    source
+      .filter((b) => b.status === "DONE")
+      .forEach((b) => {
+        const raw = (b as any).dateCreated ?? (b as any).createdAt ?? null;
+        if (!raw) return;
+        const d = new Date(raw);
+        if (isNaN(d.getTime()) || d.getFullYear() !== currentYear) return;
+        const m = d.getMonth();
+        mapAmount[m] = (mapAmount[m] || 0) + b.bountyAmount;
+        mapBounties[m] = [...(mapBounties[m] || []), b];
+      });
+
+    return MONTH_LABELS.map((label, i) => ({
+      label,
+      amount: mapAmount[i] || 0,
+      bounties: mapBounties[i] || [],
+    }));
+  }, [allUserBounties, userBounties, earningsFetched]);
+
+  const maxEarning = Math.max(...monthlyEarnings.map((m) => m.amount), 1);
+  const yearTotal = monthlyEarnings.reduce((s, m) => s + m.amount, 0);
+
+  const totalEarnedAllTime = useMemo(() => {
+    const source = earningsFetched ? allUserBounties : userBounties;
+    return source
+      .filter((b) => b.status === "DONE")
+      .reduce((s, b) => s + b.bountyAmount, 0);
+  }, [allUserBounties, userBounties, earningsFetched]);
+
+  const openBounty = (bounty: Bounty) => {
+    setSelectedBounty(bounty);
+    setIsDetailModalOpen(true);
+  };
 
   return (
     <ProtectedRoute>
@@ -117,42 +244,38 @@ export default function MyBountiesPage() {
           onCancel={() => setIsNewBountyModalOpen(false)}
         />
 
-        <div className="imd:container mx-auto px-4 py-8">
-          {/* Header */}
-          <div className="mb-8">
-            <Link
-              href="/home"
-              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
-            >
-              <ArrowLeft className="h-4 w-4" /> Back
-            </Link>
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-              <div>
-                <h1 className="text-3xl font-extrabold mb-1">My Bounties</h1>
-                <p className="text-muted-foreground">
-                  Manage your active submissions and history.
-                </p>
-              </div>
-              <Button
-                className="gap-2 rounded-full shadow-lg shadow-primary/20 shrink-0"
-                onClick={() => setIsNewBountyModalOpen(true)}
-              >
-                <Plus className="w-4 h-4" /> New Bounty
-              </Button>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* ── Header ── */}
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+            <div>
+              <h1 className="text-3xl font-extrabold mb-1">My Bounties</h1>
+              <p className="text-muted-foreground">
+                Track your active submissions, history, and earnings.
+              </p>
             </div>
+            <Button
+              className="gap-2 rounded-full shadow-lg shadow-primary/20 shrink-0"
+              onClick={() => setIsNewBountyModalOpen(true)}
+            >
+              <Plus className="w-4 h-4" /> New Bounty
+            </Button>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10">
+          {/* ── Stats ── */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             <Card className="bg-card border-border">
               <CardContent className="pt-5 pb-5">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground">
-                      Total Rewards
+                      Total Earned
                     </p>
                     <p className="text-xl font-bold mt-0.5">
-                      {stats.totalRewards.toLocaleString()} ZEC
+                      {(earningsFetched
+                        ? totalEarnedAllTime
+                        : stats.totalRewards
+                      ).toLocaleString()}{" "}
+                      ZEC
                     </p>
                   </div>
                   <TrendingUp className="w-7 h-7 text-primary opacity-20" />
@@ -205,135 +328,395 @@ export default function MyBountiesPage() {
             </Card>
           </div>
 
-          {/* Toolbar */}
-          <div className="flex items-center justify-between pb-4 border-b mb-6">
+          {/* ── Toolbar ── */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b mb-6">
             <h2 className="text-xl font-bold">All Bounties</h2>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* ── Status filter pills (shown only on bounties view) ── */}
+              {viewMode === "bounties" && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {/* All pill */}
+                  <button
+                    onClick={() => setStatusFilter("ALL")}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-sm transition-all ${
+                      statusFilter === "ALL"
+                        ? "border-border bg-muted font-medium text-foreground"
+                        : "border-transparent text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    All
+                    <span className="text-[11px] bg-muted text-muted-foreground rounded-full px-1.5 py-px">
+                      {userBounties.length}
+                    </span>
+                  </button>
+
+                  {/* Per-status pills */}
+                  {STATUS_COLUMNS.map((col) => {
+                    const count = userBounties.filter(
+                      (b) => b.status === col.status,
+                    ).length;
+                    const isActive = statusFilter === col.status;
+                    return (
+                      <button
+                        key={col.status}
+                        onClick={() => setStatusFilter(col.status)}
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-sm transition-all ${
+                          isActive
+                            ? "border-border bg-muted font-medium text-foreground"
+                            : "border-transparent text-muted-foreground hover:bg-muted/50"
+                        }`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${col.dotColor}`}
+                        />
+                        {col.label}
+                        <span className="text-[11px] bg-muted text-muted-foreground rounded-full px-1.5 py-px">
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* ── Earnings toggle ── */}
               <Button
-                variant={viewMode === "grid" ? "secondary" : "ghost"}
+                variant={viewMode === "earnings" ? "secondary" : "ghost"}
                 size="icon"
-                className="h-8 w-8"
-                onClick={() => setViewMode("grid")}
+                className="h-8 w-8 shrink-0"
+                title="Monthly earnings"
+                onClick={() =>
+                  setViewMode((v) =>
+                    v === "earnings" ? "bounties" : "earnings",
+                  )
+                }
               >
-                <LayoutGrid className="h-4 w-4" />
-              </Button>
-              <Button
-                variant={viewMode === "list" ? "secondary" : "ghost"}
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setViewMode("list")}
-              >
-                <List className="h-4 w-4" />
+                <BarChart2 className="h-4 w-4" />
               </Button>
             </div>
           </div>
 
-          {/* Kanban board (grid) */}
-          {viewMode === "grid" ? (
-            userBounties.length === 0 ? (
-              <div className="text-center py-20 border rounded-xl bg-muted/20">
-                <p className="text-muted-foreground">
-                  No bounties yet. Start hunting in the marketplace!
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto pb-4 -mx-1 px-1">
-                <div className="flex gap-4 items-start min-w-max">
-                  {columns.map((col) => (
-                    <div
-                      key={col.status}
-                      className="flex flex-col gap-3 w-72 xl:w-[22.5rem] flex-shrink-0"
-                    >
-                      <div
-                        className={`rounded-lg border border-t-2 bg-muted/30 px-3 py-2 flex items-center justify-between ${col.color}`}
-                      >
+          {/* ── Bounties view ── */}
+          {viewMode === "bounties" && (
+            <>
+              {userBounties.length === 0 ? (
+                <EmptyState />
+              ) : visibleBounties.length === 0 ? (
+                <div className="text-center py-20 border rounded-xl bg-muted/20">
+                  <p className="text-muted-foreground">
+                    No bounties with this status.
+                  </p>
+                </div>
+              ) : statusFilter === "ALL" ? (
+                /* Grouped by status when showing all */
+                <div className="space-y-8">
+                  {groupedBounties
+                    .filter((col) => col.bounties.length > 0)
+                    .map((col) => (
+                      <div key={col.status} className="space-y-3">
                         <div className="flex items-center gap-2">
                           <span
                             className={`h-2 w-2 rounded-full ${col.dotColor}`}
                           />
-                          <span className="text-sm font-semibold">
-                            {col.label}
-                          </span>
+                          <h3 className="text-sm font-semibold">{col.label}</h3>
+                          <Badge
+                            variant="secondary"
+                            className="text-[10px] h-5 px-1.5"
+                          >
+                            {col.bounties.length}
+                          </Badge>
+                          <div className="flex-1 border-t border-border/50 ml-1" />
                         </div>
-                        <Badge
-                          variant="secondary"
-                          className="text-[10px] h-5 px-1.5"
-                        >
-                          {col.bounties.length}
-                        </Badge>
-                      </div>
-
-                      <div className="flex flex-col gap-3">
-                        {col.bounties.length === 0 ? (
-                          <div className="rounded-lg border border-dashed bg-muted/10 py-8 flex items-center justify-center">
-                            <p className="text-xs text-muted-foreground">
-                              No bounties
-                            </p>
-                          </div>
-                        ) : (
-                          col.bounties.map((bounty) => (
+                        <div className="flex flex-col gap-2">
+                          {col.bounties.map((bounty) => (
                             <BountyCard
                               key={bounty.id}
                               bounty={bounty}
-                              viewMode="kanban"
-                              onClick={() => {
-                                setSelectedBounty(bounty);
-                                setIsDetailModalOpen(true);
-                              }}
+                              viewMode="list"
+                              onClick={() => openBounty(bounty)}
                             />
-                          ))
-                        )}
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    ))}
+                </div>
+              ) : (
+                /* Flat list when a single status is selected */
+                <div className="flex flex-col gap-2">
+                  {visibleBounties.map((bounty) => (
+                    <BountyCard
+                      key={bounty.id}
+                      bounty={bounty}
+                      viewMode="list"
+                      onClick={() => openBounty(bounty)}
+                    />
                   ))}
                 </div>
+              )}
+            </>
+          )}
+
+          {/* ── Monthly Earnings ── */}
+          {viewMode === "earnings" && (
+            <div className="space-y-6">
+              {/* Header row */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold">Earnings Overview</h2>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {new Date().getFullYear()} — click any month to see details
+                  </p>
+                </div>
+                {!earningsLoading && yearTotal > 0 && (
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Year total</p>
+                    <p className="text-2xl font-bold">
+                      {yearTotal.toLocaleString()} ZEC
+                    </p>
+                  </div>
+                )}
               </div>
-            )
-          ) : /* ── LIST MODE (grouped by status) ── */
-          userBounties.length > 0 ? (
-            <div className="space-y-8">
-              {columns
-                .filter((col) => col.bounties.length > 0)
-                .map((col) => (
-                  <div key={col.status} className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`h-2 w-2 rounded-full ${col.dotColor}`}
-                      />
-                      <h3 className="text-sm font-semibold">{col.label}</h3>
-                      <Badge
-                        variant="secondary"
-                        className="text-[10px] h-5 px-1.5"
-                      >
-                        {col.bounties.length}
-                      </Badge>
-                      <div className="flex-1 border-t border-border/50 ml-1" />
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      {col.bounties.map((bounty) => (
-                        <BountyCard
-                          key={bounty.id}
-                          bounty={bounty}
-                          viewMode="list"
-                          onClick={() => {
-                            setSelectedBounty(bounty);
-                            setIsDetailModalOpen(true);
-                          }}
-                        />
-                      ))}
+
+              {earningsLoading ? (
+                <div className="flex items-center justify-center py-24 gap-3 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="text-sm">Loading earnings…</span>
+                </div>
+              ) : yearTotal === 0 ? (
+                <div className="flex flex-col items-center justify-center py-24 border rounded-xl bg-muted/10 gap-2">
+                  <CheckCircle className="h-8 w-8 text-muted-foreground/30" />
+                  <p className="text-sm text-muted-foreground">
+                    No completed bounties this year yet.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
+                  {/* ── Left: chart ── */}
+                  <div className="lg:col-span-3">
+                    <Card className="bg-card border-border">
+                      <CardContent className="pt-6 pb-4 px-4">
+                        {/* Chart area */}
+                        <div className="flex items-end gap-1.5 h-48">
+                          {monthlyEarnings.map((m, i) => {
+                            const heightPct =
+                              maxEarning > 0
+                                ? (m.amount / maxEarning) * 100
+                                : 0;
+                            const isSelected = selectedMonthIdx === i;
+                            const hasData = m.amount > 0;
+                            return (
+                              <div
+                                key={m.label}
+                                className={`flex flex-col flex-1 items-center gap-0 h-full justify-end ${hasData ? "cursor-pointer" : "cursor-default"}`}
+                                onClick={() =>
+                                  hasData &&
+                                  setSelectedMonthIdx(isSelected ? null : i)
+                                }
+                              >
+                                <div className="w-full flex flex-col justify-end h-44 relative group">
+                                  {hasData && (
+                                    <div className="absolute -top-7 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+                                      <div className="bg-foreground text-background text-[10px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap">
+                                        {m.amount} ZEC
+                                      </div>
+                                    </div>
+                                  )}
+                                  <div className="w-full rounded-md overflow-hidden bg-muted h-44 relative">
+                                    <div
+                                      className={`absolute bottom-0 left-0 right-0 rounded-md transition-all duration-500 ease-out ${
+                                        isSelected
+                                          ? "bg-primary"
+                                          : hasData
+                                            ? "bg-primary/40 group-hover:bg-primary/70"
+                                            : ""
+                                      }`}
+                                      style={{ height: `${heightPct}%` }}
+                                    />
+                                    {isSelected && heightPct > 0 && (
+                                      <div
+                                        className="absolute left-0 right-0 h-0.5 bg-primary"
+                                        style={{ bottom: `${heightPct}%` }}
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Month labels */}
+                        <div className="flex gap-1.5 mt-2">
+                          {monthlyEarnings.map((m, i) => (
+                            <div
+                              key={m.label}
+                              className={`flex-1 text-center text-[10px] font-medium transition-colors ${
+                                selectedMonthIdx === i
+                                  ? "text-primary"
+                                  : "text-muted-foreground"
+                              }`}
+                            >
+                              {m.label}
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Month summary list */}
+                    <div className="mt-4 space-y-1">
+                      {monthlyEarnings
+                        .filter((m) => m.amount > 0)
+                        .map((m) => {
+                          const idx = MONTH_LABELS.indexOf(m.label);
+                          const isSelected = selectedMonthIdx === idx;
+                          return (
+                            <button
+                              key={m.label}
+                              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg border transition-all text-left ${
+                                isSelected
+                                  ? "border-primary/50 bg-primary/5"
+                                  : "border-transparent hover:border-border hover:bg-muted/30"
+                              }`}
+                              onClick={() =>
+                                setSelectedMonthIdx(isSelected ? null : idx)
+                              }
+                            >
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${isSelected ? "bg-primary" : "bg-muted-foreground/40"}`}
+                                />
+                                <span
+                                  className={`text-sm font-medium ${isSelected ? "text-foreground" : "text-muted-foreground"}`}
+                                >
+                                  {m.label}
+                                </span>
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[10px] h-4 px-1.5 font-normal"
+                                >
+                                  {m.bounties.length}{" "}
+                                  {m.bounties.length === 1
+                                    ? "bounty"
+                                    : "bounties"}
+                                </Badge>
+                              </div>
+                              <span
+                                className={`text-sm font-semibold ${isSelected ? "text-primary" : "text-foreground"}`}
+                              >
+                                {m.amount.toLocaleString()} ZEC
+                              </span>
+                            </button>
+                          );
+                        })}
                     </div>
                   </div>
-                ))}
-            </div>
-          ) : (
-            <div className="text-center py-20 border rounded-xl bg-muted/20">
-              <p className="text-muted-foreground">
-                No bounties yet. Start hunting in the marketplace!
-              </p>
+
+                  {/* ── Right: drill-down ── */}
+                  <div className="lg:col-span-2">
+                    {selectedMonthIdx === null ? (
+                      <div className="flex flex-col items-center justify-center h-48 rounded-xl border border-dashed border-border text-center px-6">
+                        <BarChart2 className="h-6 w-6 text-muted-foreground/30 mb-2" />
+                        <p className="text-sm text-muted-foreground">
+                          Select a month to see its bounties
+                        </p>
+                      </div>
+                    ) : (
+                      <Card className="bg-card border-border overflow-hidden">
+                        <div className="px-4 pt-4 pb-3 border-b border-border">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+                                {MONTH_LABELS[selectedMonthIdx]}{" "}
+                                {new Date().getFullYear()}
+                              </p>
+                              <p className="text-2xl font-bold mt-0.5">
+                                {monthlyEarnings[
+                                  selectedMonthIdx
+                                ].amount.toLocaleString()}{" "}
+                                ZEC
+                              </p>
+                            </div>
+                            <Badge
+                              variant="secondary"
+                              className="mt-1 shrink-0"
+                            >
+                              {
+                                monthlyEarnings[selectedMonthIdx].bounties
+                                  .length
+                              }{" "}
+                              {monthlyEarnings[selectedMonthIdx].bounties
+                                .length === 1
+                                ? "bounty"
+                                : "bounties"}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        <div className="divide-y divide-border max-h-96 overflow-y-auto">
+                          {monthlyEarnings[selectedMonthIdx].bounties.map(
+                            (b) => (
+                              <div
+                                key={b.id}
+                                className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer group"
+                                onClick={() => openBounty(b)}
+                              >
+                                <div className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
+                                    {b.title}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    {new Date(
+                                      (b as any).dateCreated ??
+                                        (b as any).createdAt,
+                                    ).toLocaleDateString("en-US", {
+                                      month: "short",
+                                      day: "numeric",
+                                    })}
+                                  </p>
+                                </div>
+                                <span className="text-sm font-semibold shrink-0 tabular-nums">
+                                  {b.bountyAmount.toLocaleString()} ZEC
+                                </span>
+                              </div>
+                            ),
+                          )}
+                        </div>
+
+                        {monthlyEarnings[selectedMonthIdx].bounties.length >
+                          1 && (
+                          <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-muted/20">
+                            <span className="text-xs text-muted-foreground">
+                              Total
+                            </span>
+                            <span className="text-sm font-bold">
+                              {monthlyEarnings[
+                                selectedMonthIdx
+                              ].amount.toLocaleString()}{" "}
+                              ZEC
+                            </span>
+                          </div>
+                        )}
+                      </Card>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
       </main>
     </ProtectedRoute>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="text-center py-20 border rounded-xl bg-muted/20">
+      <p className="text-muted-foreground">
+        No bounties yet. Start hunting in the marketplace!
+      </p>
+    </div>
   );
 }
