@@ -162,3 +162,13 @@ export interface Team {
   members: TeamMember[];
   wallet?: TeamWallet | null;
 }
+
+export interface RecoveryData {
+  "seed phrase"?: string;
+  ufvk?: string;
+  uivk?: string;
+  birthday?: number;
+  accountIndex?: number;
+  no_of_accounts?: number;
+  diversifierIndex?: number;
+}

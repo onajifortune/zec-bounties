@@ -79,7 +79,7 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { useBounty } from "@/lib/bounty-context";
-import type { ZcashParams, Team } from "@/lib/types";
+import type { ZcashParams, Team, RecoveryData } from "@/lib/types";
 import { ImportWalletModal } from "@/components/settings/import-modal";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -354,111 +354,95 @@ const NAV: {
 // Recovery panel
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface RecoveryData {
-  seed?: string;
-  ufvk?: string;
-  uivk?: string;
-  birthdayHeight?: number;
-  accountIndex?: number;
-  diversifierIndex?: number;
-}
+type UnlockStep = "idle" | "otp_sent" | "unlocked";
 
 function RecoveryPanel({ config }: { config: ZcashParams }) {
-  const { getZcashParam } = useBounty();
+  const { requestRecoveryOtp, verifyRecoveryOtp } = useBounty();
   const { toast } = useToast();
+
+  const [step, setStep] = useState<UnlockStep>("idle");
+  const [maskedEmail, setMaskedEmail] = useState("");
+  const [otp, setOtp] = useState("");
   const [data, setData] = useState<RecoveryData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [unlocked, setUnlocked] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [passphrase, setPassphrase] = useState("");
 
-  const unlock = useCallback(async () => {
+  const handleRequestOtp = async () => {
     setLoading(true);
     setError(null);
     try {
-      const record = await getZcashParam(config.accountName);
-      if (!record) throw new Error("Wallet record not found");
-      const ext = record as ZcashParams & {
-        seed?: string;
-        ufvk?: string;
-        uivk?: string;
-        birthdayHeight?: number;
-        accountIndex?: number;
-        diversifierIndex?: number;
-      };
-      setData({
-        seed: ext.seed,
-        ufvk: ext.ufvk,
-        uivk: ext.uivk,
-        birthdayHeight: ext.birthdayHeight,
-        accountIndex: ext.accountIndex ?? 0,
-        diversifierIndex: ext.diversifierIndex ?? 0,
-      });
-      setUnlocked(true);
+      const res = await requestRecoveryOtp();
+      setMaskedEmail(res.email);
+      setStep("otp_sent");
     } catch (e: any) {
-      setError(e?.message ?? "Failed to fetch recovery info");
-      toast({
-        title: "Error",
-        description: "Could not fetch recovery info.",
-        variant: "destructive",
-      });
+      setError(e?.message ?? "Failed to send code");
     } finally {
       setLoading(false);
     }
-  }, [config.accountName, getZcashParam, toast]);
+  };
 
-  if (!unlocked) {
+  const handleVerifyOtp = async () => {
+    if (!otp.trim()) {
+      setError("Enter the code from your email");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await verifyRecoveryOtp(otp.trim(), config.accountName);
+      setData(result);
+      setStep("unlocked");
+    } catch (e: any) {
+      setError(e?.message ?? "Invalid code");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLock = () => {
+    setStep("idle");
+    setData(null);
+    setOtp("");
+    setError(null);
+    setMaskedEmail("");
+  };
+
+  // Step 1 — initial prompt
+  if (step === "idle") {
     return (
       <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-gradient-to-br from-amber-50 to-amber-50/30 dark:from-amber-950/30 dark:to-amber-950/10 p-5">
         <div className="flex gap-3 mb-4">
           <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center shrink-0">
             <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400" />
           </div>
-          <div className="min-w-0">
+          <div>
             <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
-              Reveal sensitive recovery data
+              Verify your identity
             </p>
             <p className="text-xs text-amber-700/80 dark:text-amber-300/70 mt-1 leading-relaxed">
-              This will expose your seed phrase and viewing keys. Make sure
-              you're in a private location and no one is watching your screen.
+              We'll send a one-time code to your email to confirm it's you
+              before revealing any sensitive data.
             </p>
           </div>
         </div>
-
-        <div className="space-y-2 pl-11">
-          <Label className="text-xs">
-            Passphrase{" "}
-            <span className="text-muted-foreground font-normal">
-              (if wallet is encrypted)
-            </span>
-          </Label>
-          <div className="flex gap-2">
-            <Input
-              type="password"
-              placeholder="Leave blank if none"
-              value={passphrase}
-              onChange={(e) => setPassphrase(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && unlock()}
-              className="h-9 text-sm font-mono flex-1"
-            />
-            <Button
-              size="sm"
-              onClick={unlock}
-              disabled={loading}
-              className="h-9 shrink-0"
-            >
-              {loading ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <>
-                  <Unlock className="w-3.5 h-3.5 mr-1.5" />
-                  Unlock & reveal
-                </>
-              )}
-            </Button>
-          </div>
+        <div className="pl-11">
+          <Button
+            size="sm"
+            onClick={handleRequestOtp}
+            disabled={loading}
+            className="h-9"
+          >
+            {loading ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <>
+                <KeyRound className="w-3.5 h-3.5 mr-1.5" />
+                Send verification code
+              </>
+            )}
+          </Button>
           {error && (
-            <p className="text-xs text-destructive flex items-center gap-1 pt-1">
+            <p className="text-xs text-destructive flex items-center gap-1 mt-2">
               <AlertCircle className="w-3 h-3" />
               {error}
             </p>
@@ -468,13 +452,81 @@ function RecoveryPanel({ config }: { config: ZcashParams }) {
     );
   }
 
+  // Step 2 — OTP entry
+  if (step === "otp_sent") {
+    return (
+      <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-gradient-to-br from-amber-50 to-amber-50/30 dark:from-amber-950/30 dark:to-amber-950/10 p-5">
+        <div className="flex gap-3 mb-4">
+          <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center shrink-0">
+            <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+              Enter verification code
+            </p>
+            <p className="text-xs text-amber-700/80 dark:text-amber-300/70 mt-1">
+              Sent to{" "}
+              <span className="font-mono font-semibold">{maskedEmail}</span>.
+              Valid for 5 minutes.
+            </p>
+          </div>
+        </div>
+        <div className="space-y-2 pl-11">
+          <div className="flex gap-2">
+            <Input
+              placeholder="000000"
+              value={otp}
+              onChange={(e) =>
+                setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+              }
+              onKeyDown={(e) => e.key === "Enter" && handleVerifyOtp()}
+              className="h-9 text-sm font-mono tracking-widest w-32"
+              maxLength={6}
+            />
+            <Button
+              size="sm"
+              onClick={handleVerifyOtp}
+              disabled={loading || otp.length < 6}
+              className="h-9"
+            >
+              {loading ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <>
+                  <Unlock className="w-3.5 h-3.5 mr-1.5" />
+                  Verify
+                </>
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRequestOtp}
+              disabled={loading}
+              className="h-9 text-xs text-muted-foreground"
+            >
+              Resend
+            </Button>
+          </div>
+          {error && (
+            <p className="text-xs text-destructive flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />
+              {error}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Step 3 — unlocked, show data (same as before)
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-3 gap-2">
         <StatChip
           icon={Clock}
           label="Birthday"
-          value={data?.birthdayHeight?.toLocaleString() ?? "—"}
+          value={data?.birthday?.toLocaleString() ?? "—"}
           color="sky"
         />
         <StatChip
@@ -484,15 +536,15 @@ function RecoveryPanel({ config }: { config: ZcashParams }) {
         />
         <StatChip
           icon={Layers}
-          label="Diversifier"
-          value={`#${data?.diversifierIndex ?? 0}`}
+          label="No of Accounts"
+          value={`${data?.no_of_accounts ?? 1}`}
         />
       </div>
 
-      {data?.seed ? (
+      {data?.["seed phrase"] ? (
         <SensitiveField
           label="Seed phrase"
-          value={data.seed}
+          value={data["seed phrase"]}
           icon={KeyRound}
           warning="Full control over your funds. Never share with anyone."
         />
@@ -530,11 +582,7 @@ function RecoveryPanel({ config }: { config: ZcashParams }) {
           variant="ghost"
           size="sm"
           className="h-7 text-xs text-muted-foreground"
-          onClick={() => {
-            setUnlocked(false);
-            setData(null);
-            setPassphrase("");
-          }}
+          onClick={handleLock}
         >
           <Lock className="w-3 h-3 mr-1" />
           Lock
@@ -1348,69 +1396,48 @@ export default function SettingsPage() {
 
         {allWallets.length === 0 ? (
           <EmptyState icon={KeyRound} title="No wallets to recover" />
-        ) : (
-          <div className="space-y-5">
-            <div className="rounded-xl border border-border bg-card p-4">
-              <Label className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-2 block">
-                Select wallet
-              </Label>
-              <Select
-                value={recoveryTarget?.accountName ?? ""}
-                onValueChange={(v) => {
-                  const found = allWallets.find((w) => w.accountName === v);
-                  setRecoveryTarget(found ?? null);
-                }}
+        ) : activeConfig ? (
+          <div className="space-y-4">
+            {/* Active wallet indicator */}
+            <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-muted/50 border border-border">
+              <div className="w-6 h-6 rounded-md bg-sky-100 dark:bg-sky-950/50 flex items-center justify-center shrink-0">
+                {activeConfig.isTeam ? (
+                  <Building2 className="w-3 h-3 text-sky-600 dark:text-sky-400" />
+                ) : (
+                  <User className="w-3 h-3 text-sky-600 dark:text-sky-400" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold truncate">
+                  {activeConfig.accountName}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  Active wallet
+                </p>
+              </div>
+              <span
+                className={cn(
+                  "text-[10px] font-bold px-1.5 py-0.5 rounded",
+                  activeConfig.chain === "mainnet"
+                    ? "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30"
+                    : "text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30",
+                )}
               >
-                <SelectTrigger className="h-10 text-sm">
-                  <SelectValue placeholder="Choose a wallet…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {personalWallets.length > 0 && (
-                    <>
-                      <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                        Personal
-                      </div>
-                      {personalWallets.map((w) => (
-                        <SelectItem key={w.id} value={w.accountName}>
-                          <span className="flex items-center gap-2">
-                            <User className="w-3 h-3 text-sky-500" />
-                            {w.accountName}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </>
-                  )}
-                  {teamWallets.length > 0 && (
-                    <>
-                      <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                        Teams
-                      </div>
-                      {teamWallets.map((w) => (
-                        <SelectItem key={w.id} value={w.accountName}>
-                          <span className="flex items-center gap-2">
-                            <Building2 className="w-3 h-3 text-violet-500" />
-                            {w.accountName}
-                            {w.teamName && (
-                              <span className="text-muted-foreground">
-                                · {w.teamName}
-                              </span>
-                            )}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </>
-                  )}
-                </SelectContent>
-              </Select>
+                {activeConfig.chain === "mainnet" ? "Mainnet" : "Testnet"}
+              </span>
             </div>
 
-            {recoveryTarget && (
-              <RecoveryPanel
-                key={recoveryTarget.accountName}
-                config={recoveryTarget}
-              />
-            )}
+            <RecoveryPanel
+              key={activeConfig.accountName}
+              config={activeConfig}
+            />
           </div>
+        ) : (
+          <EmptyState
+            icon={KeyRound}
+            title="No active wallet"
+            hint="Set a wallet as active first."
+          />
         )}
       </div>
     );

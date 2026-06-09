@@ -13,6 +13,7 @@ import type {
   Team,
   TeamMember,
   TeamWallet,
+  RecoveryData,
 } from "./types";
 import { backendUrl, backendWebSpocketUrl } from "./configENV";
 
@@ -78,6 +79,11 @@ interface BountyContextType {
   ) => Promise<{ success: boolean; user?: any }>;
   logout: () => void;
   setCurrentUser: React.Dispatch<React.SetStateAction<User | null>>;
+  requestRecoveryOtp: () => Promise<{ message: string; email: string }>;
+  verifyRecoveryOtp: (
+    otp: string,
+    accountName: string,
+  ) => Promise<RecoveryData>;
 
   // Role switching (isRobin users only)
   switchRole: () => Promise<void>;
@@ -2404,6 +2410,38 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     [bounties, applications],
   );
 
+  const requestRecoveryOtp = async (): Promise<{
+    message: string;
+    email: string;
+  }> => {
+    const res = await fetch(`${backendUrl}/auth/recovery/request-otp`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || "Failed to send OTP");
+    }
+    return res.json();
+  };
+
+  const verifyRecoveryOtp = async (
+    otp: string,
+    accountName: string,
+  ): Promise<RecoveryData> => {
+    const res = await fetch(`${backendUrl}/auth/recovery/verify-otp`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ otp, accountName }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || "Verification failed");
+    }
+    const { data } = await res.json();
+    return data;
+  };
+
   return (
     <BountyContext.Provider
       value={{
@@ -2414,6 +2452,8 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         setCurrentUser,
         switchRole,
         isSwitchingRole,
+        requestRecoveryOtp,
+        verifyRecoveryOtp,
         categories,
         categoriesLoading,
         fetchCategories,
