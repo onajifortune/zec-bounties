@@ -760,8 +760,6 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         };
       }
 
-      console.log(response);
-
       return {
         success: true,
         message: response.message || "Connection successful",
