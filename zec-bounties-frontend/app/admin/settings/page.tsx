@@ -467,12 +467,15 @@ function RecoveryPanel({ config }: { config: ZcashParams }) {
             <p className="text-xs text-amber-700/80 dark:text-amber-300/70 mt-1">
               Sent to{" "}
               <span className="font-mono font-semibold">{maskedEmail}</span>.
-              Valid for 5 minutes.
+              Valid for 5 minutes.{" "}
+              <span className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                Check spam
+              </span>
             </p>
           </div>
         </div>
         <div className="space-y-2 pl-11">
-          <div className="flex gap-2">
+          <div className="flex flex-col imd:flex-row gap-2">
             <Input
               placeholder="000000"
               value={otp}
@@ -480,8 +483,8 @@ function RecoveryPanel({ config }: { config: ZcashParams }) {
                 setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
               }
               onKeyDown={(e) => e.key === "Enter" && handleVerifyOtp()}
-              className="h-9 text-sm font-mono tracking-widest w-32"
-              maxLength={6}
+              className="h-9 text-sm font-mono tracking-widest imd:w-32 imd:max-w-[128px]"
+              // maxLength={6}
             />
             <Button
               size="sm"
