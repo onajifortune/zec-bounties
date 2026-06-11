@@ -207,8 +207,14 @@ export function AdminBountyModal({
                 <div className="relative">
                   <Input
                     id="timeToComplete"
-                    type="datetime-local"
-                    value={formData.timeToComplete.toISOString().slice(0, 16)}
+                    type="date"
+                    min={new Date().toISOString().split("T")[0]}
+                    value={
+                      formData.timeToComplete instanceof Date &&
+                      !isNaN(formData.timeToComplete.getTime())
+                        ? formData.timeToComplete.toISOString().split("T")[0]
+                        : ""
+                    }
                     onChange={handleDateChange}
                     required
                   />

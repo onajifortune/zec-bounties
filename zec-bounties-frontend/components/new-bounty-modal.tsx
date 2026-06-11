@@ -188,6 +188,22 @@ export function NewBountyModal({
               </div>
             </div>
             <div className="grid gap-2">
+              <Label htmlFor="timeToComplete">Time to Complete</Label>
+              <Input
+                id="timeToComplete"
+                type="date"
+                min={new Date().toISOString().split("T")[0]}
+                value={
+                  formData.timeToComplete instanceof Date &&
+                  !isNaN(formData.timeToComplete.getTime())
+                    ? formData.timeToComplete.toISOString().split("T")[0]
+                    : ""
+                }
+                onChange={handleDateChange}
+                required
+              />
+            </div>
+            <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>
               <Textarea
                 id="description"
