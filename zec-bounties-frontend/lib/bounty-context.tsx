@@ -2108,6 +2108,8 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   ) => {
     if (!currentUser) return;
 
+    console.log(data);
+
     try {
       // 1. Update core bounty fields
       const res = await fetch(`${backendUrl}/api/bounties/${id}`, {
@@ -2146,10 +2148,10 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
           const errData = await assignRes.json();
           throw new Error(errData.error || "Failed to update assignees");
         }
-
-        // Re-fetch bounties so assignees array is fresh
-        await fetchBounties();
       }
+
+      // Re-fetch bounties so assignees array is fresh
+      await fetchBounties();
     } catch (error) {
       console.error("Failed to update bounty:", error);
       throw error;
@@ -2208,9 +2210,9 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       if (!res.ok) throw new Error("Failed to approve bounty");
 
       const updated = await res.json();
-      setBounties((prev) =>
-        prev.map((bounty) => (bounty.id === id ? updated : bounty)),
-      );
+
+      // Re-fetch bounties so assignees array is fresh
+      await fetchBounties();
     } catch (error) {
       console.error("Failed to approve bounty:", error);
       throw error;

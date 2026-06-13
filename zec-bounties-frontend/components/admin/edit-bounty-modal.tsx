@@ -95,6 +95,11 @@ export function EditBountyModal({
     if (!bounty) return;
     setIsSaving(true);
     try {
+      const existingIds = bounty.assignees?.map((a) => a.userId) ?? [];
+      const assigneesChanged =
+        selectedUserIds.length !== existingIds.length ||
+        selectedUserIds.some((id) => !existingIds.includes(id));
+
       await updateBounty(bounty.id, {
         title,
         description,
@@ -103,7 +108,7 @@ export function EditBountyModal({
           ? new Date(timeToComplete).toISOString()
           : undefined,
         // Pass userIds for assignees — handled in updateBounty
-        userIds: selectedUserIds,
+        ...(assigneesChanged && { userIds: selectedUserIds }),
       } as any);
       onOpenChange(false);
     } catch (err) {
