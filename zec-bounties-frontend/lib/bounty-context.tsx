@@ -171,6 +171,7 @@ interface BountyContextType {
   balance: number | undefined;
   fetchBalance: () => Promise<void>;
   address: string | undefined;
+  addresses: string[];
   fetchAddresses: () => Promise<void>;
 
   // Sync status & rescan
@@ -300,6 +301,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   >({});
   const [balance, setBalance] = useState<number | undefined>(undefined);
   const [address, setAddress] = useState<string | undefined>(undefined);
+  const [addresses, setAddresses] = useState<string[]>([]);
   const [paymentIDs, setPaymentIDs] = useState<string[] | undefined>(undefined);
   const [categories, setCategories] = useState<BountyCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
@@ -1364,7 +1366,9 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
 
       if (res.ok) {
         const data = await res.json();
-        setAddress(data.encoded_address);
+        const list = data.map((a: any) => a.encoded_address).filter(Boolean);
+        setAddresses(list);
+        setAddress(list[0]); // keep single address in sync for anything that uses it
       }
     } catch (error) {
       console.error("Failed to fetch addresses:", error);
@@ -2503,6 +2507,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         balance,
         fetchBalance,
         address,
+        addresses,
         fetchAddresses,
         syncStatus,
         syncStatusLoading,
