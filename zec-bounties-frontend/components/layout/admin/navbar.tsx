@@ -281,10 +281,15 @@ export function AdminNavbar({
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await Promise.all([fetchAddresses(), fetchBalance()]);
+      await Promise.all([fetchBalance()]);
     } finally {
       setIsRefreshing(false);
     }
+  };
+
+  const handleWalletClick = async () => {
+    setTopupOpen(true);
+    await Promise.all([fetchAddresses()]);
   };
 
   const handleSyncStatus = async () => {
@@ -427,7 +432,7 @@ export function AdminNavbar({
               <Button
                 variant="ghost"
                 className="gap-2 h-9 text-xs font-mono"
-                onClick={() => setTopupOpen(true)}
+                onClick={handleWalletClick}
               >
                 <Wallet className="h-4 w-4" />
                 {balance ? `${(balance / 1e8).toFixed(4)} ZEC` : `0.0000 ZEC`}
