@@ -2108,10 +2108,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   ) => {
     if (!currentUser) return;
 
-    console.log(data);
-
     try {
-      // 1. Update core bounty fields
       const res = await fetch(`${backendUrl}/api/bounties/${id}`, {
         method: "PUT",
         headers: getAuthHeaders(),
@@ -2120,20 +2117,11 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
           ...(data.description && { description: data.description }),
           ...(data.bountyAmount && { bountyAmount: data.bountyAmount }),
           ...(data.timeToComplete && { timeToComplete: data.timeToComplete }),
-          ...(data.assignee !== undefined && {
-            assignees: data.assignee === "none" ? null : data.userIds,
-          }),
         }),
       });
 
       if (!res.ok) throw new Error("Failed to update bounty");
 
-      const updated = await res.json();
-      setBounties((prev) =>
-        prev.map((bounty) => (bounty.id === id ? updated : bounty)),
-      );
-
-      // 2. If userIds provided, sync assignees via the assignees endpoint
       if (data.userIds !== undefined) {
         const assignRes = await fetch(
           `${backendUrl}/api/bounties/${id}/assignees`,
@@ -2143,15 +2131,19 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
             body: JSON.stringify({ userIds: data.userIds }),
           },
         );
-
         if (!assignRes.ok) {
           const errData = await assignRes.json();
           throw new Error(errData.error || "Failed to update assignees");
         }
       }
 
-      // Re-fetch bounties so assignees array is fresh
-      await fetchBounties();
+      // Fetch only this one bounty (with full nested user data) and merge it in
+      const fresh = await fetchBountyById(id);
+      if (fresh) {
+        setBounties((prev) =>
+          prev.map((bounty) => (bounty.id === id ? fresh : bounty)),
+        );
+      }
     } catch (error) {
       console.error("Failed to update bounty:", error);
       throw error;
