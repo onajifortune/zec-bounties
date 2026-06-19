@@ -53,6 +53,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AdminBountyModal } from "@/components/admin-bounty-modal";
@@ -137,14 +138,20 @@ export default function AdminDashboard() {
   const [assigneeSectionBounty, setAssigneeSectionBounty] =
     useState<Bounty | null>(null);
   const [winnerBounty, setWinnerBounty] = useState<Bounty | null>(null);
+  const [chainFilter, setChainFilter] = useState<"MAIN" | "TEST">("TEST");
 
   // Filtered bounties for the table
+  const chainFilteredBounties = useMemo(
+    () => bounties.filter((b) => b.chain === chainFilter),
+    [bounties, chainFilter],
+  );
+
   const filteredBounties = useMemo(
     () =>
       bountyStatusFilter === "ALL"
-        ? bounties
-        : bounties.filter((b) => b.status === bountyStatusFilter),
-    [bounties, bountyStatusFilter],
+        ? chainFilteredBounties
+        : chainFilteredBounties.filter((b) => b.status === bountyStatusFilter),
+    [chainFilteredBounties, bountyStatusFilter],
   );
 
   useEffect(() => {
@@ -343,20 +350,48 @@ export default function AdminDashboard() {
               Platform-wide overview and management
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button
-              onClick={() => setShowAdminBountyModal(true)}
-              className="gap-2"
-            >
-              <UserPlus className="h-4 w-4" /> New Bounty
-            </Button>
-            <Button
-              variant="outline"
-              className="gap-2 bg-transparent"
-              onClick={() => setShowGlobalSettings(true)}
-            >
-              <Settings2 className="h-4 w-4" /> Global Settings
-            </Button>
+          <div className="flex flex-col imd:flex-row items-end imd:items-center gap-3">
+            <div className="flex items-center gap-3 px-3 py-1.5 rounded-full border bg-muted/40">
+              <span
+                className={`text-sm font-medium transition-colors ${
+                  chainFilter === "TEST"
+                    ? "text-foreground"
+                    : "text-muted-foreground"
+                }`}
+              >
+                Test
+              </span>
+              <Switch
+                checked={chainFilter === "MAIN"}
+                onCheckedChange={(checked) =>
+                  setChainFilter(checked ? "MAIN" : "TEST")
+                }
+              />
+              <span
+                className={`text-sm font-medium transition-colors ${
+                  chainFilter === "MAIN"
+                    ? "text-foreground"
+                    : "text-muted-foreground"
+                }`}
+              >
+                Main
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => setShowAdminBountyModal(true)}
+                className="gap-2"
+              >
+                <UserPlus className="h-4 w-4" /> New Bounty
+              </Button>
+              <Button
+                variant="outline"
+                className="gap-2 bg-transparent"
+                onClick={() => setShowGlobalSettings(true)}
+              >
+                <Settings2 className="h-4 w-4" /> Global Settings
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -482,8 +517,8 @@ export default function AdminDashboard() {
                                   <span>{active?.label ?? "All"}</span>
                                   <span className="text-[11px] bg-muted text-muted-foreground rounded-full px-1.5 py-px">
                                     {bountyStatusFilter === "ALL"
-                                      ? bounties.length
-                                      : bounties.filter(
+                                      ? chainFilteredBounties.length
+                                      : chainFilteredBounties.filter(
                                           (b) =>
                                             b.status === bountyStatusFilter,
                                         ).length}
@@ -501,9 +536,10 @@ export default function AdminDashboard() {
                         {STATUS_FILTERS.map((f) => {
                           const count =
                             f.status === "ALL"
-                              ? bounties.length
-                              : bounties.filter((b) => b.status === f.status)
-                                  .length;
+                              ? chainFilteredBounties.length
+                              : chainFilteredBounties.filter(
+                                  (b) => b.status === f.status,
+                                ).length;
                           const isActive = bountyStatusFilter === f.status;
                           return (
                             <DropdownMenuItem
@@ -534,9 +570,10 @@ export default function AdminDashboard() {
                     {STATUS_FILTERS.map((f) => {
                       const count =
                         f.status === "ALL"
-                          ? bounties.length
-                          : bounties.filter((b) => b.status === f.status)
-                              .length;
+                          ? chainFilteredBounties.length
+                          : chainFilteredBounties.filter(
+                              (b) => b.status === f.status,
+                            ).length;
                       const isActive = bountyStatusFilter === f.status;
                       return (
                         <button

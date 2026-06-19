@@ -2095,6 +2095,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
           createdBy: currentUser.id,
           isApproved: currentUser.role === "ADMIN" ? true : false,
           categoryId: data.category,
+          chain: data.chain,
         }),
       });
 
@@ -2123,6 +2124,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
           ...(data.description && { description: data.description }),
           ...(data.bountyAmount && { bountyAmount: data.bountyAmount }),
           ...(data.timeToComplete && { timeToComplete: data.timeToComplete }),
+          ...(data.chain && { chain: data.chain }),
         }),
       });
 

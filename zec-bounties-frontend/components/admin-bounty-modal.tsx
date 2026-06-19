@@ -149,7 +149,7 @@ export function AdminBountyModal({
                 required
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="admin-category">Category</Label>
                 <Select
@@ -184,7 +184,29 @@ export function AdminBountyModal({
                   </SelectContent>
                 </Select>
               </div>
+              <div className="grid gap-2">
+                <Label htmlFor="admin-chain">Network</Label>
+                <Select
+                  required
+                  value={formData.chain}
+                  onValueChange={(value) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      chain: value as "MAIN" | "TEST",
+                    }))
+                  }
+                >
+                  <SelectTrigger id="admin-chain">
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TEST">Testnet</SelectItem>
+                    <SelectItem value="MAIN">Mainnet</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="admin-reward">Reward (ZEC)</Label>

@@ -25,6 +25,13 @@ import {
   FileText,
   UserPlus,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useBounty } from "@/lib/bounty-context";
 import { Bounty } from "@/lib/types";
 
@@ -53,6 +60,7 @@ export function EditBountyModal({
   const [description, setDescription] = useState("");
   const [bountyAmount, setBountyAmount] = useState("");
   const [timeToComplete, setTimeToComplete] = useState("");
+  const [chain, setChain] = useState<"MAIN" | "TEST">("TEST");
 
   // Assignee picker
   const [assigneeSearch, setAssigneeSearch] = useState("");
@@ -69,6 +77,7 @@ export function EditBountyModal({
         ? new Date(bounty.timeToComplete).toISOString().slice(0, 10)
         : "",
     );
+    setChain(bounty.chain ?? "TEST");
     // Pre-select existing assignees
     const existingIds = bounty.assignees?.map((a) => a.userId) ?? [];
     setSelectedUserIds(existingIds);
@@ -107,6 +116,7 @@ export function EditBountyModal({
         timeToComplete: timeToComplete
           ? new Date(timeToComplete).toISOString()
           : undefined,
+        chain,
         // Pass userIds for assignees — handled in updateBounty
         ...(assigneesChanged && { userIds: selectedUserIds }),
       } as any);
@@ -123,6 +133,11 @@ export function EditBountyModal({
   const selectedUsers = nonAdminUsers.filter((u) =>
     selectedUserIds.includes(u.id),
   );
+
+  const selectedUsersWithoutAddress = selectedUsers.filter((u) =>
+    chain === "MAIN" ? !u.UA_address : !u.z_address,
+  );
+  const hasAddressWarning = selectedUsersWithoutAddress.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -206,7 +221,7 @@ export function EditBountyModal({
               </div>
 
               {/* Amount + Deadline side by side */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <Label
                     htmlFor="edit-amount"
@@ -224,6 +239,28 @@ export function EditBountyModal({
                     onChange={(e) => setBountyAmount(e.target.value)}
                     placeholder="0.000"
                   />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="edit-chain"
+                    className="flex items-center gap-1.5"
+                  >
+                    <Coins className="h-3.5 w-3.5 text-muted-foreground" />
+                    Network
+                  </Label>
+                  <Select
+                    value={chain}
+                    onValueChange={(v) => setChain(v as "MAIN" | "TEST")}
+                  >
+                    <SelectTrigger id="edit-chain" className="w-full">
+                      <SelectValue placeholder="Select network" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="TEST">Testnet</SelectItem>
+                      <SelectItem value="MAIN">Mainnet</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-1.5">
@@ -275,6 +312,31 @@ export function EditBountyModal({
                 </div>
               )}
 
+              {hasAddressWarning && (
+                <div className="flex items-start gap-2.5 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 text-sm">
+                  <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-medium text-yellow-800 dark:text-yellow-200">
+                      Missing{" "}
+                      {chain === "MAIN"
+                        ? "Unified Address (UA)"
+                        : "Transparent Address (TA)"}
+                    </p>
+                    <p className="text-yellow-700 dark:text-yellow-300 text-xs">
+                      {selectedUsersWithoutAddress
+                        .map((u) => u.name)
+                        .join(", ")}{" "}
+                      {selectedUsersWithoutAddress.length === 1
+                        ? "has"
+                        : "have"}{" "}
+                      no {chain === "MAIN" ? "UA" : "TA"} set and cannot receive
+                      payment on {chain === "MAIN" ? "mainnet" : "testnet"}.
+                      Remove them or ask them to set their address first.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -320,16 +382,26 @@ export function EditBountyModal({
                           </p>
                           <p className="text-xs text-muted-foreground truncate">
                             {user.email}
-                            {user.z_address ? (
-                              <span className="text-green-600 flex items-center gap-0.5 shrink-0">
+                          </p>
+                          {chain === "MAIN" ? (
+                            user.UA_address ? (
+                              <span className="text-green-600 flex items-center gap-0.5 shrink-0 text-xs">
                                 <CheckCircle2 className="h-3 w-3" /> UA set
                               </span>
                             ) : (
-                              <span className="text-yellow-600 flex items-center gap-0.5 shrink-0">
-                                <AlertTriangle className="h-3 w-3" /> no UA
+                              <span className="text-red-600 flex items-center gap-0.5 shrink-0 text-xs">
+                                <AlertTriangle className="h-3 w-3" /> No UA
                               </span>
-                            )}
-                          </p>
+                            )
+                          ) : user.z_address ? (
+                            <span className="text-blue-600 flex items-center gap-0.5 shrink-0 text-xs">
+                              <CheckCircle2 className="h-3 w-3" /> TA set
+                            </span>
+                          ) : (
+                            <span className="text-yellow-600 flex items-center gap-0.5 shrink-0 text-xs">
+                              <AlertTriangle className="h-3 w-3" /> No TA
+                            </span>
+                          )}
                         </div>
                         <div
                           className={`h-5 w-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
@@ -376,7 +448,7 @@ export function EditBountyModal({
             <Button
               size="sm"
               onClick={handleSave}
-              disabled={isSaving || !title.trim()}
+              disabled={isSaving || !title.trim() || hasAddressWarning}
               className="gap-2 min-w-[90px]"
             >
               {isSaving ? (

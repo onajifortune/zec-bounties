@@ -20,11 +20,14 @@ import {
   MessageSquare,
   CheckCircle2,
   Send,
+  AlertTriangle,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useBounty } from "@/lib/bounty-context";
 import { format } from "date-fns";
+import Link from "next/link";
+import { Notice } from "@/lib/types";
 
 interface BountyDetailModalProps {
   bounty: Bounty | null;
@@ -87,6 +90,9 @@ export function BountyDetailModal({
     (bounty.assignees?.some((a) => a.userId === currentUser.id) ||
       bounty.assignee === currentUser.id);
 
+  const isMissingUAForMainnet =
+    bounty.chain === "MAIN" && !currentUser?.UA_address;
+
   // Find this user's own WorkSubmission (submittedBy === currentUser.id)
   const userWorkSubmission = currentUser
     ? (workSubmissions.find((s) => s.submittedBy === currentUser.id) ?? null)
@@ -98,6 +104,7 @@ export function BountyDetailModal({
     isAssignedToCurrentUser &&
     !hasCurrentUserSubmitted &&
     !submissionsLoading &&
+    bounty.status !== "TO_DO" &&
     bounty.status !== "DONE" &&
     bounty.status !== "CANCELLED";
 
@@ -106,9 +113,58 @@ export function BountyDetailModal({
     currentUser &&
     bounty.createdBy !== currentUser.id &&
     !userApplication &&
-    !isAssignedToCurrentUser;
+    !isAssignedToCurrentUser &&
+    !isMissingUAForMainnet;
 
   const hasApplied = !!userApplication;
+
+  const notice: Notice | null = (() => {
+    // Assigned user: bounty not yet approved
+    if (isAssignedToCurrentUser && bounty.status === "TO_DO") {
+      return {
+        type: "warning",
+        title: "Bounty not yet approved",
+        message:
+          "This bounty is pending approval. You'll be able to submit your work once an admin activates it.",
+      };
+    }
+
+    // Non-assigned, non-applied cases
+    if (!isAssignedToCurrentUser && !hasApplied) {
+      if (!currentUser) {
+        return {
+          type: "info",
+          title: "Login required",
+          message: "Please log in to apply for this bounty.",
+        };
+      }
+      if (bounty.createdBy === currentUser.id) {
+        return {
+          type: "info",
+          title: "Your bounty",
+          message: "You cannot apply to your own bounty.",
+        };
+      }
+      if (bounty.chain === "MAIN" && !currentUser.UA_address) {
+        return {
+          type: "warning",
+          title: "Unified Address required",
+          message:
+            "This bounty pays out on mainnet. You need a Unified Address (UA) set on your profile before you can apply.",
+          action: { label: "Click here to set your UA", href: "/profile" },
+        };
+      }
+      if (bounty.status === "DONE" || bounty.status === "CANCELLED") {
+        return {
+          type: "info",
+          title: "Bounty closed",
+          message: "This bounty is no longer accepting applications.",
+        };
+      }
+    }
+
+    return null;
+  })();
 
   const handleApply = async () => {
     if (!applicationMessage.trim()) return;
@@ -389,6 +445,69 @@ export function BountyDetailModal({
               </div>
             )}
 
+            {notice && (
+              <div className="border-t pt-6">
+                <div
+                  className={`p-4 rounded-lg border flex items-start gap-3 ${
+                    notice.type === "warning"
+                      ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800"
+                      : notice.type === "error"
+                        ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+                        : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                  }`}
+                >
+                  <AlertTriangle
+                    className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                      notice.type === "warning"
+                        ? "text-yellow-600 dark:text-yellow-400"
+                        : notice.type === "error"
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-slate-400"
+                    }`}
+                  />
+                  <div className="space-y-1.5">
+                    <p
+                      className={`text-sm font-semibold ${
+                        notice.type === "warning"
+                          ? "text-yellow-800 dark:text-yellow-200"
+                          : notice.type === "error"
+                            ? "text-red-800 dark:text-red-200"
+                            : "text-slate-700 dark:text-slate-200"
+                      }`}
+                    >
+                      {notice.title}
+                    </p>
+                    <p
+                      className={`text-sm ${
+                        notice.type === "warning"
+                          ? "text-yellow-700 dark:text-yellow-300"
+                          : notice.type === "error"
+                            ? "text-red-700 dark:text-red-300"
+                            : "text-slate-600 dark:text-slate-400"
+                      }`}
+                    >
+                      {notice.message}
+                    </p>
+                    {notice.action && (
+                      <Link href={notice.action.href}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className={`mt-1 ${
+                            notice.type === "warning"
+                              ? "border-yellow-400 text-yellow-800 dark:text-yellow-200 hover:bg-yellow-100 dark:hover:bg-yellow-900/40"
+                              : ""
+                          }`}
+                        >
+                          {notice.action.label}
+                        </Button>
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Application status */}
             {hasApplied && (
               <div className="border-t pt-6">
@@ -451,21 +570,6 @@ export function BountyDetailModal({
                       </p>
                     )}
                   </div>
-                </div>
-              </div>
-            )}
-
-            {/* Cannot apply message */}
-            {!canApply && !hasApplied && !isAssignedToCurrentUser && (
-              <div className="border-t pt-6">
-                <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
-                  <p className="text-slate-600 dark:text-slate-400">
-                    {!currentUser
-                      ? "Please log in to apply for this bounty."
-                      : bounty.createdBy === currentUser.id
-                        ? "You cannot apply to your own bounty."
-                        : ""}
-                  </p>
                 </div>
               </div>
             )}

@@ -58,6 +58,7 @@ export interface Bounty {
   categoryId?: string;
   category?: BountyCategory;
   difficulty: "Easy" | "Medium" | "Hard";
+  chain: "MAIN" | "TEST";
   assignees?: BountyAssignee[];
 }
 
@@ -68,6 +69,7 @@ export interface BountyFormData {
   bountyAmount: number;
   timeToComplete: Date;
   category: string;
+  chain?: "MAIN" | "TEST";
 }
 
 export interface ZcashParamsFormData {
@@ -185,3 +187,10 @@ export interface ZcashInfo {
   consensus_branch_id: string;
   latest_block_height: number;
 }
+
+export type Notice = {
+  type: "info" | "warning" | "error";
+  title: string;
+  message: string;
+  action?: { label: string; href: string };
+};
