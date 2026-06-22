@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   Send,
   AlertTriangle,
+  ExternalLink,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -50,26 +51,18 @@ export function BountyDetailModal({
 
   const [applicationMessage, setApplicationMessage] = useState("");
   const [isApplying, setIsApplying] = useState(false);
-
-  // Work submission states
   const [submissionDescription, setSubmissionDescription] = useState("");
   const [deliverableUrl, setDeliverableUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Local work submissions state — fetched when modal opens
   const [workSubmissions, setWorkSubmissions] = useState<WorkSubmission[]>([]);
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
 
-  // Fetch work submissions whenever the modal opens for an assigned user
   useEffect(() => {
     if (!open || !bounty || !currentUser) return;
-
     const isAssigned =
       bounty.assignees?.some((a) => a.userId === currentUser.id) ||
       bounty.assignee === currentUser.id;
-
     if (!isAssigned) return;
-
     setSubmissionsLoading(true);
     fetchWorkSubmissions(bounty.id)
       .then((data) => setWorkSubmissions(data ?? []))
@@ -84,12 +77,10 @@ export function BountyDetailModal({
 
   if (!bounty) return null;
 
-  // Get current user's application for this bounty
   const userApplication = currentUser
     ? getUserApplicationForBounty(bounty.id)
     : null;
 
-  // Check if current user is assigned to this bounty
   const isAssignedToCurrentUser =
     currentUser &&
     (bounty.assignees?.some((a) => a.userId === currentUser.id) ||
@@ -98,13 +89,11 @@ export function BountyDetailModal({
   const isMissingUAForMainnet =
     bounty.chain === "MAIN" && !currentUser?.UA_address;
 
-  // Find this user's own WorkSubmission (submittedBy === currentUser.id)
   const userWorkSubmission = currentUser
     ? (workSubmissions.find((s) => s.submittedBy === currentUser.id) ?? null)
     : null;
   const hasCurrentUserSubmitted = !!userWorkSubmission;
 
-  // Can submit: assigned, hasn't personally submitted yet, bounty not closed
   const canSubmitWork =
     isAssignedToCurrentUser &&
     !hasCurrentUserSubmitted &&
@@ -113,7 +102,6 @@ export function BountyDetailModal({
     bounty.status !== "DONE" &&
     bounty.status !== "CANCELLED";
 
-  // Can apply: logged in, not the creator, not already applied, not already assigned
   const canApply =
     currentUser &&
     bounty.createdBy !== currentUser.id &&
@@ -124,7 +112,6 @@ export function BountyDetailModal({
   const hasApplied = !!userApplication;
 
   const notice: Notice | null = (() => {
-    // Assigned user: bounty not yet approved
     if (isAssignedToCurrentUser && bounty.status === "TO_DO") {
       return {
         type: "warning",
@@ -133,8 +120,6 @@ export function BountyDetailModal({
           "This bounty is pending approval. You'll be able to submit your work once an admin activates it.",
       };
     }
-
-    // Non-assigned, non-applied cases
     if (!isAssignedToCurrentUser && !hasApplied) {
       if (!currentUser) {
         return {
@@ -167,7 +152,6 @@ export function BountyDetailModal({
         };
       }
     }
-
     return null;
   })();
 
@@ -194,7 +178,6 @@ export function BountyDetailModal({
         description: submissionDescription,
         deliverableUrl,
       });
-
       const optimistic: WorkSubmission = {
         id: `optimistic-${Date.now()}`,
         bountyId: bounty.id,
@@ -206,7 +189,6 @@ export function BountyDetailModal({
         submitterUser: currentUser as User,
       };
       setWorkSubmissions((prev) => [optimistic, ...prev]);
-
       setSubmissionDescription("");
       setDeliverableUrl("");
       toast.success("Work submitted successfully!");
@@ -226,11 +208,26 @@ export function BountyDetailModal({
     setWorkSubmissions([]);
   };
 
+  const statusBadgeClass = (status?: string) => {
+    switch (status) {
+      case "approved":
+        return "text-green-700 dark:text-green-400 border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-900/20";
+      case "rejected":
+        return "text-red-700 dark:text-red-400 border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/20";
+      case "needs_revision":
+        return "text-orange-700 dark:text-orange-400 border-orange-300 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20";
+      case "accepted":
+        return "text-green-700 dark:text-green-400 border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-900/20";
+      default:
+        return "text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20";
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-3xl max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center gap-2 mb-2">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="pb-3 border-b border-border">
+          <div className="flex flex-wrap items-center gap-1.5 mb-2">
             <Badge
               variant="secondary"
               className="uppercase tracking-wider text-[10px]"
@@ -246,79 +243,78 @@ export function BountyDetailModal({
             {isAssignedToCurrentUser && (
               <Badge
                 variant="outline"
-                className="text-purple-600 border-purple-200 dark:text-purple-400 dark:border-purple-800"
+                className="text-purple-600 border-purple-200 dark:text-purple-400 dark:border-purple-800 text-[10px]"
               >
                 Assigned to You
               </Badge>
             )}
           </div>
-          <DialogTitle className="text-2xl font-bold">
+          <DialogTitle className="text-lg font-semibold leading-snug">
             {bounty.title}
           </DialogTitle>
-          <DialogDescription className="flex items-center gap-4 mt-2">
+          <DialogDescription className="flex items-center gap-3 mt-1">
             <span className="flex items-center gap-1 text-xs">
-              <Clock className="h-3 w-3" /> Published on{" "}
+              <Clock className="h-3 w-3" />
               {format(bounty.dateCreated, "MMM dd, yyyy")}
             </span>
             <span className="flex items-center gap-1 text-xs">
-              <Users className="h-3 w-3" /> {bounty.applications?.length || 0}{" "}
-              Applications
+              <Users className="h-3 w-3" />
+              {bounty.applications?.length || 0} applications
             </span>
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-6">
-          <div className="md:col-span-2 space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          {/* ── Left column ── */}
+          <div className="md:col-span-2 space-y-4">
+            {/* Description */}
             <div>
-              <h4 className="font-semibold mb-2 flex items-center gap-2">
-                <Shield className="h-4 w-4 text-primary" /> Description
+              <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+                <Shield className="h-3.5 w-3.5" /> Description
               </h4>
-              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+              <p className="text-sm text-muted-foreground leading-relaxed break-words overflow-wrap-anywhere whitespace-pre-wrap">
                 {bounty.description}
               </p>
             </div>
 
-            {/* Work Submission — only shown if assigned and not yet submitted */}
+            {/* Submit Work */}
             {canSubmitWork && (
-              <div className="border-t pt-6">
-                <h3 className="text-lg font-semibold mb-4">Submit Your Work</h3>
-                <div className="space-y-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-                  <p className="text-green-700 dark:text-green-300 text-sm">
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-semibold mb-3">Submit Your Work</h3>
+                <div className="space-y-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                  <p className="text-xs text-green-700 dark:text-green-300">
                     You are assigned to this bounty. Ready to submit your
                     completed work?
                   </p>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="submission-description">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="submission-description" className="text-xs">
                       Work Description <span className="text-red-500">*</span>
                     </Label>
                     <Textarea
                       id="submission-description"
-                      placeholder="Describe the work you've completed, what you delivered, and any important notes..."
+                      placeholder="Describe what you delivered and any important notes..."
                       value={submissionDescription}
                       onChange={(e) => setSubmissionDescription(e.target.value)}
-                      className="min-h-[100px]"
+                      className="min-h-[80px] text-sm"
                     />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="deliverable-url">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="deliverable-url" className="text-xs">
                       Deliverable URL <span className="text-red-500">*</span>
                     </Label>
                     <input
                       id="deliverable-url"
                       type="url"
-                      placeholder="https://github.com/username/repo or https://drive.google.com/..."
+                      placeholder="https://github.com/username/repo"
                       value={deliverableUrl}
                       onChange={(e) => setDeliverableUrl(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-md text-sm"
+                      className="w-full px-3 py-1.5 border rounded-md text-sm"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Link to your completed work (GitHub repo, Google Drive,
-                      deployed app, etc.)
+                    <p className="text-[11px] text-muted-foreground">
+                      Link to your completed work (GitHub, Drive, deployed app,
+                      etc.)
                     </p>
                   </div>
-
                   <Button
                     onClick={handleSubmitWork}
                     disabled={
@@ -326,16 +322,17 @@ export function BountyDetailModal({
                       !deliverableUrl.trim() ||
                       isSubmitting
                     }
+                    size="sm"
                     className="bg-green-600 hover:bg-green-700 text-white w-full"
                   >
                     {isSubmitting ? (
                       <>
-                        <Clock className="w-4 h-4 mr-2 animate-spin" />
+                        <Clock className="w-3.5 h-3.5 mr-1.5 animate-spin" />
                         Submitting...
                       </>
                     ) : (
                       <>
-                        <Send className="w-4 h-4 mr-2" />
+                        <Send className="w-3.5 h-3.5 mr-1.5" />
                         Submit Work
                       </>
                     )}
@@ -344,94 +341,75 @@ export function BountyDetailModal({
               </div>
             )}
 
-            {/* Already submitted — show this user's WorkSubmission */}
+            {/* Already submitted */}
             {isAssignedToCurrentUser && hasCurrentUserSubmitted && (
-              <div className="border-t pt-6">
-                <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
-                      <span className="font-semibold text-green-800 dark:text-green-200">
+              <div className="border-t pt-4">
+                <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400" />
+                      <span className="text-sm font-semibold text-green-800 dark:text-green-200">
                         Work Submitted
                       </span>
                     </div>
                     <Badge
                       variant="outline"
-                      className={
-                        userWorkSubmission?.status === "approved"
-                          ? "text-green-600 border-green-200"
-                          : userWorkSubmission?.status === "rejected"
-                            ? "text-red-600 border-red-200"
-                            : userWorkSubmission?.status === "needs_revision"
-                              ? "text-orange-600 border-orange-200"
-                              : "text-yellow-600 border-yellow-200"
-                      }
+                      className={`text-[10px] rounded-full ${statusBadgeClass(userWorkSubmission?.status)}`}
                     >
                       {userWorkSubmission?.status ?? "pending"}
                     </Badge>
                   </div>
 
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-sm text-green-700 dark:text-green-300 mb-1">
-                        <strong>Your submission:</strong>
-                      </p>
-                      <p className="text-green-600 dark:text-green-400 text-sm bg-white dark:bg-green-950/30 p-3 rounded border">
-                        {userWorkSubmission?.description}
-                      </p>
-                    </div>
+                  <div className="p-2.5 bg-white dark:bg-green-950/30 border rounded text-xs text-green-700 dark:text-green-300 leading-relaxed">
+                    {userWorkSubmission?.description}
+                  </div>
 
-                    {userWorkSubmission?.deliverableUrl && (
-                      <div>
-                        <p className="text-sm text-green-700 dark:text-green-300 mb-1">
-                          <strong>Deliverable:</strong>
+                  {userWorkSubmission?.deliverableUrl && (
+                    <a
+                      href={userWorkSubmission.deliverableUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline break-all"
+                    >
+                      <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                      {userWorkSubmission.deliverableUrl}
+                    </a>
+                  )}
+
+                  <p className="text-[11px] text-green-600 dark:text-green-400">
+                    Submitted{" "}
+                    {userWorkSubmission?.submittedAt
+                      ? format(
+                          new Date(userWorkSubmission.submittedAt),
+                          "MMM d, yyyy 'at' p",
+                        )
+                      : "—"}
+                  </p>
+
+                  {userWorkSubmission?.status === "needs_revision" &&
+                    userWorkSubmission.reviewNotes && (
+                      <div className="p-2.5 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded">
+                        <p className="text-xs font-semibold text-orange-700 dark:text-orange-300 mb-1">
+                          Revision Notes
                         </p>
-                        <a
-                          href={userWorkSubmission.deliverableUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-blue-600 underline break-all"
-                        >
-                          {userWorkSubmission.deliverableUrl}
-                        </a>
+                        <p className="text-xs text-orange-600 dark:text-orange-400">
+                          {userWorkSubmission.reviewNotes}
+                        </p>
                       </div>
                     )}
-
-                    <div className="text-xs text-green-600 dark:text-green-400">
-                      Submitted on:{" "}
-                      {userWorkSubmission?.submittedAt
-                        ? format(
-                            new Date(userWorkSubmission.submittedAt),
-                            "PPP 'at' p",
-                          )
-                        : "Unknown"}
-                    </div>
-
-                    {userWorkSubmission?.status === "needs_revision" &&
-                      userWorkSubmission.reviewNotes && (
-                        <div className="p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded">
-                          <p className="text-sm font-semibold text-orange-700 dark:text-orange-300 mb-1">
-                            Revision Notes:
-                          </p>
-                          <p className="text-sm text-orange-600 dark:text-orange-400">
-                            {userWorkSubmission.reviewNotes}
-                          </p>
-                        </div>
-                      )}
-                  </div>
                 </div>
               </div>
             )}
 
-            {/* Application Section */}
+            {/* Apply */}
             {canApply && (
-              <div className="border-t pt-6">
-                <h3 className="text-lg font-semibold mb-4">
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-semibold mb-3">
                   Apply for this Bounty
                 </h3>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="application-message">
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="application-message" className="text-xs">
                       Application Message{" "}
                       <span className="text-red-500">*</span>
                     </Label>
@@ -440,65 +418,69 @@ export function BountyDetailModal({
                       placeholder="Tell us why you're the right person for this bounty..."
                       value={applicationMessage}
                       onChange={(e) => setApplicationMessage(e.target.value)}
-                      className="min-h-[120px]"
+                      className="min-h-[90px] text-sm"
                     />
                   </div>
-                  <div className="flex gap-3">
+                  <div className="flex gap-2">
                     <Button
+                      size="sm"
                       className="flex-1"
                       onClick={handleApply}
                       disabled={!applicationMessage.trim() || isApplying}
                     >
                       {isApplying ? "Applying..." : "Submit Application"}
-                      {!isApplying && <CheckCircle2 className="ml-2 h-4 w-4" />}
+                      {!isApplying && (
+                        <CheckCircle2 className="ml-1.5 h-3.5 w-3.5" />
+                      )}
                     </Button>
-                    <Button variant="outline" size="icon">
-                      <MessageSquare className="h-4 w-4" />
+                    <Button variant="outline" size="icon" className="h-9 w-9">
+                      <MessageSquare className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 </div>
               </div>
             )}
 
+            {/* Notice */}
             {notice && (
-              <div className="border-t pt-6">
+              <div className="border-t pt-4">
                 <div
-                  className={`p-4 rounded-lg border flex items-start gap-3 ${
+                  className={`p-3 rounded-lg border flex items-start gap-2.5 ${
                     notice.type === "warning"
                       ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800"
                       : notice.type === "error"
                         ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
-                        : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                        : "bg-muted/50 border-border"
                   }`}
                 >
                   <AlertTriangle
-                    className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                    className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
                       notice.type === "warning"
                         ? "text-yellow-600 dark:text-yellow-400"
                         : notice.type === "error"
                           ? "text-red-600 dark:text-red-400"
-                          : "text-slate-400"
+                          : "text-muted-foreground"
                     }`}
                   />
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     <p
-                      className={`text-sm font-semibold ${
+                      className={`text-xs font-semibold ${
                         notice.type === "warning"
                           ? "text-yellow-800 dark:text-yellow-200"
                           : notice.type === "error"
                             ? "text-red-800 dark:text-red-200"
-                            : "text-slate-700 dark:text-slate-200"
+                            : "text-foreground"
                       }`}
                     >
                       {notice.title}
                     </p>
                     <p
-                      className={`text-sm ${
+                      className={`text-xs ${
                         notice.type === "warning"
                           ? "text-yellow-700 dark:text-yellow-300"
                           : notice.type === "error"
                             ? "text-red-700 dark:text-red-300"
-                            : "text-slate-600 dark:text-slate-400"
+                            : "text-muted-foreground"
                       }`}
                     >
                       {notice.message}
@@ -508,7 +490,7 @@ export function BountyDetailModal({
                         <Button
                           size="sm"
                           variant="outline"
-                          className={`mt-1 ${
+                          className={`mt-1 h-7 text-xs ${
                             notice.type === "warning"
                               ? "border-yellow-400 text-yellow-800 dark:text-yellow-200 hover:bg-yellow-100 dark:hover:bg-yellow-900/40"
                               : ""
@@ -525,116 +507,104 @@ export function BountyDetailModal({
 
             {/* Application status */}
             {hasApplied && (
-              <div className="border-t pt-6">
-                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center">
-                      <CheckCircle2 className="w-5 h-5 mr-2 text-blue-600 dark:text-blue-400" />
-                      <span className="font-semibold text-blue-800 dark:text-blue-200">
+              <div className="border-t pt-4">
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      <span className="text-sm font-semibold text-blue-800 dark:text-blue-200">
                         Your Application
                       </span>
                     </div>
                     <Badge
                       variant="outline"
-                      className={
-                        userApplication?.status === "accepted"
-                          ? "text-green-600 border-green-200"
-                          : userApplication?.status === "rejected"
-                            ? "text-red-600 border-red-200"
-                            : "text-yellow-600 border-yellow-200"
-                      }
+                      className={`text-[10px] rounded-full ${statusBadgeClass(userApplication?.status)}`}
                     >
                       {userApplication?.status || "pending"}
                     </Badge>
                   </div>
 
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-sm text-blue-700 dark:text-blue-300 mb-2">
-                        <strong>Your message:</strong>
-                      </p>
-                      <p className="text-blue-600 dark:text-blue-400 text-sm bg-white dark:bg-blue-950/30 p-3 rounded border">
-                        {userApplication?.message}
-                      </p>
-                    </div>
-
-                    <div className="text-xs text-blue-600 dark:text-blue-400">
-                      Applied on:{" "}
-                      {userApplication?.appliedAt
-                        ? format(
-                            new Date(userApplication.appliedAt),
-                            "PPP 'at' p",
-                          )
-                        : "Unknown"}
-                    </div>
-
-                    {userApplication?.status === "pending" && (
-                      <p className="text-blue-700 dark:text-blue-300 text-sm">
-                        Your application is being reviewed by the bounty
-                        creator.
-                      </p>
-                    )}
-                    {userApplication?.status === "accepted" && (
-                      <p className="text-green-700 dark:text-green-300 text-sm">
-                        Congratulations! Your application has been accepted.
-                      </p>
-                    )}
-                    {userApplication?.status === "rejected" && (
-                      <p className="text-red-700 dark:text-red-300 text-sm">
-                        Your application was not selected for this bounty.
-                      </p>
-                    )}
+                  <div className="p-2.5 bg-white dark:bg-blue-950/30 border rounded text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+                    {userApplication?.message}
                   </div>
+
+                  <p className="text-[11px] text-blue-600 dark:text-blue-400">
+                    Applied{" "}
+                    {userApplication?.appliedAt
+                      ? format(
+                          new Date(userApplication.appliedAt),
+                          "MMM d, yyyy 'at' p",
+                        )
+                      : "—"}
+                  </p>
+
+                  <p
+                    className={`text-xs ${
+                      userApplication?.status === "accepted"
+                        ? "text-green-700 dark:text-green-300"
+                        : userApplication?.status === "rejected"
+                          ? "text-red-700 dark:text-red-300"
+                          : "text-blue-700 dark:text-blue-300"
+                    }`}
+                  >
+                    {userApplication?.status === "accepted"
+                      ? "Congratulations! Your application has been accepted."
+                      : userApplication?.status === "rejected"
+                        ? "Your application was not selected for this bounty."
+                        : "Your application is being reviewed by the bounty creator."}
+                  </p>
                 </div>
               </div>
             )}
           </div>
 
-          <div className="space-y-6">
-            <div className="rounded-xl border bg-muted/30 p-4">
-              <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+          {/* ── Right sidebar ── */}
+          <div className="space-y-4">
+            {/* Reward */}
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">
                 Reward
-              </h4>
-              <div className="flex items-center gap-2 text-2xl font-bold">
-                {bounty.bountyAmount}{" "}
-                <span className="text-sm font-normal text-muted-foreground">
-                  ZEC
+              </p>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-2xl font-bold">
+                  {bounty.bountyAmount}
                 </span>
+                <span className="text-xs text-muted-foreground">ZEC</span>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-1">
+              <p className="text-[10px] text-muted-foreground mt-0.5">
                 Paid upon successful review
               </p>
             </div>
 
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+            {/* Issuer */}
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
                 Issuer
-              </h4>
-              <div className="flex items-center gap-3">
-                <Avatar className="h-10 w-10 border">
+              </p>
+              <div className="flex items-center gap-2.5">
+                <Avatar className="h-8 w-8 border">
                   <AvatarImage
                     src={
                       bounty.createdByUser?.avatar || "/placeholder-user.jpg"
                     }
                   />
-                  <AvatarFallback>
+                  <AvatarFallback className="text-xs">
                     {bounty.createdByUser?.name?.charAt(0) || "?"}
                   </AvatarFallback>
                 </Avatar>
-                <div>
-                  <p className="text-sm font-semibold">
-                    {bounty.createdByUser?.name || "Unknown"}
-                  </p>
-                </div>
+                <p className="text-sm font-medium">
+                  {bounty.createdByUser?.name || "Unknown"}
+                </p>
               </div>
             </div>
 
+            {/* Assignees */}
             {bounty.assignees && bounty.assignees.length > 0 && (
-              <div className="space-y-3 pt-4 border-t">
-                <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              <div className="pt-3 border-t">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
                   Assigned To
-                </h4>
-                <div className="space-y-2">
+                </p>
+                <div className="space-y-1.5">
                   {bounty.assignees.map((a) => {
                     const hasSubmitted = workSubmissions.some(
                       (s) => s.submittedBy === a.userId,
@@ -642,29 +612,30 @@ export function BountyDetailModal({
                     return (
                       <div
                         key={a.userId}
-                        className="flex items-center gap-3 p-3 rounded-lg border border-primary/20 bg-primary/5"
+                        className="flex items-center gap-2.5 p-2.5 rounded-lg border border-primary/20 bg-primary/5"
                       >
-                        <Avatar className="h-8 w-8 border-2 border-primary/20">
+                        <Avatar className="h-7 w-7 border border-primary/20">
                           <AvatarImage
                             src={a.user?.avatar || "/placeholder-user.jpg"}
                           />
-                          <AvatarFallback>
+                          <AvatarFallback className="text-[10px]">
                             {a.user?.name?.[0] || "?"}
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-primary truncate">
+                          <p className="text-xs font-semibold text-primary truncate">
                             {a.user?.name || "Unknown"}
                           </p>
                           <div className="flex items-center gap-1.5">
                             {a.userId === currentUser?.id && (
-                              <p className="text-[10px] text-muted-foreground">
+                              <span className="text-[10px] text-muted-foreground">
                                 You
-                              </p>
+                              </span>
                             )}
                             {hasSubmitted && (
                               <span className="flex items-center gap-0.5 text-[10px] text-green-600 dark:text-green-400">
-                                <CheckCircle2 className="h-3 w-3" /> Submitted
+                                <CheckCircle2 className="h-2.5 w-2.5" />{" "}
+                                Submitted
                               </span>
                             )}
                           </div>

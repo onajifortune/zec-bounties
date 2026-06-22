@@ -1128,94 +1128,121 @@ export default function AdminDashboard() {
         open={isManagingApplications}
         onOpenChange={setIsManagingApplications}
       >
-        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              Manage Applications
-            </DialogTitle>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="pb-3 border-b border-border">
+            <div className="flex items-start gap-3">
+              <Users className="w-4 h-4 mt-0.5 text-muted-foreground flex-shrink-0" />
+              <div>
+                <DialogTitle className="text-base font-medium leading-tight">
+                  Applications
+                </DialogTitle>
+                {selectedBounty && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {bounties.find((b) => b.id === selectedBounty)?.title}{" "}
+                    &middot;{" "}
+                    {getAllApplicationsForBounty(selectedBounty)?.length ?? 0}{" "}
+                    applicant
+                    {getAllApplicationsForBounty(selectedBounty)?.length !== 1
+                      ? "s"
+                      : ""}
+                  </p>
+                )}
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="space-y-6">
+          <div className="flex flex-col gap-2 py-2">
             {selectedBounty &&
             getAllApplicationsForBounty(selectedBounty)?.length > 0 ? (
-              <div className="space-y-4">
-                {getAllApplicationsForBounty(selectedBounty).map(
-                  (application) => (
-                    <div
-                      key={application.id}
-                      className="p-4 border border-slate-200 dark:border-slate-700 rounded-lg space-y-3"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="font-semibold text-slate-900 dark:text-slate-100">
-                              {application.applicantUser?.name ||
-                                "Unknown User"}
-                            </div>
-                            <Badge
-                              variant="outline"
-                              className={
-                                application.status === "accepted"
-                                  ? "text-green-600 border-green-200"
-                                  : application.status === "rejected"
-                                    ? "text-red-600 border-red-200"
-                                    : "text-yellow-600 border-yellow-200"
-                              }
-                            >
-                              {application.status || "pending"}
-                            </Badge>
-                          </div>
-                          <div className="text-sm text-slate-600 dark:text-slate-400 mb-2">
-                            Applied on:{" "}
-                            {format(
-                              new Date(application.appliedAt),
-                              "PPP 'at' p",
-                            )}
-                          </div>
-                          <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded border">
-                            <p className="text-slate-900 dark:text-slate-100">
-                              {application.message}
-                            </p>
-                          </div>
-                        </div>
+              getAllApplicationsForBounty(selectedBounty).map((application) => (
+                <div
+                  key={application.id}
+                  className="border border-border rounded-lg px-3.5 py-3"
+                >
+                  {/* Top row: avatar + name + actions */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <Avatar className="h-8 w-8 flex-shrink-0 border">
+                        <AvatarImage
+                          src={
+                            application.applicantUser?.avatar ||
+                            "/placeholder-user.jpg"
+                          }
+                        />
+                        <AvatarFallback className="text-[11px]">
+                          {application.applicantUser?.name?.[0] ?? "?"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium leading-tight truncate">
+                          {application.applicantUser?.name || "Unknown User"}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Applied{" "}
+                          {format(
+                            new Date(application.appliedAt),
+                            "MMM d, yyyy",
+                          )}
+                        </p>
                       </div>
+                    </div>
+
+                    {/* Status badge + action buttons */}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] px-2 py-0.5 rounded-full ${
+                          application.status === "accepted"
+                            ? "text-green-700 dark:text-green-400 border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-900/20"
+                            : application.status === "rejected"
+                              ? "text-red-700 dark:text-red-400 border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/20"
+                              : "text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20"
+                        }`}
+                      >
+                        {application.status || "pending"}
+                      </Badge>
 
                       {application.status === "pending" && (
-                        <div className="flex gap-2 pt-3 border-t">
+                        <>
                           <Button
                             size="sm"
+                            variant="ghost"
+                            className="h-6 px-2 text-[11px] gap-1 border border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40"
                             onClick={() =>
                               handleApplicationAction(application.id, "accept")
                             }
                             disabled={isUpdating}
-                            className="flex-1"
                           >
-                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                            <CheckCircle2 className="w-3 h-3" />
                             Accept
                           </Button>
                           <Button
                             size="sm"
-                            variant="destructive"
+                            variant="ghost"
+                            className="h-6 px-2 text-[11px] gap-1 border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40"
                             onClick={() =>
                               handleApplicationAction(application.id, "reject")
                             }
                             disabled={isUpdating}
-                            className="flex-1"
                           >
-                            <AlertTriangle className="w-3 h-3 mr-1" />
-                            Reject
+                            <XCircle className="w-3 h-3" />
+                            Decline
                           </Button>
-                        </div>
+                        </>
                       )}
                     </div>
-                  ),
-                )}
-              </div>
+                  </div>
+
+                  {/* Message */}
+                  <p className="mt-2.5 text-xs text-muted-foreground leading-relaxed pl-[42px] border-l-2 border-border ml-[14px]">
+                    {application.message}
+                  </p>
+                </div>
+              ))
             ) : (
-              <div className="text-center py-8">
-                <Users className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                <p className="text-slate-600 dark:text-slate-400">
+              <div className="flex flex-col items-center py-10 text-center">
+                <Users className="w-9 h-9 text-muted-foreground/40 mb-3" />
+                <p className="text-sm text-muted-foreground">
                   No applications yet.
                 </p>
               </div>
