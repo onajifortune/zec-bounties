@@ -1128,7 +1128,7 @@ export default function AdminDashboard() {
         open={isManagingApplications}
         onOpenChange={setIsManagingApplications}
       >
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="imd:max-w-180 max-h-[90vh] overflow-y-auto">
           <DialogHeader className="pb-3 border-b border-border">
             <div className="flex items-start gap-3">
               <Users className="w-4 h-4 mt-0.5 text-muted-foreground flex-shrink-0" />
