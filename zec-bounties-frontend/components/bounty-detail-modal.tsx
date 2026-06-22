@@ -1,6 +1,6 @@
 "use client";
 
-import { Bounty, WorkSubmission } from "@/lib/types";
+import { Bounty, WorkSubmission, User } from "@/lib/types";
 import {
   Dialog,
   DialogContent,
@@ -73,7 +73,12 @@ export function BountyDetailModal({
     setSubmissionsLoading(true);
     fetchWorkSubmissions(bounty.id)
       .then((data) => setWorkSubmissions(data ?? []))
-      .catch(() => setWorkSubmissions([]))
+      .catch((err) => {
+        if (!err?.message?.includes("permission")) {
+          console.error("Failed to load submissions:", err);
+        }
+        setWorkSubmissions([]);
+      })
       .finally(() => setSubmissionsLoading(false));
   }, [open, bounty?.id, currentUser?.id]);
 
@@ -189,12 +194,22 @@ export function BountyDetailModal({
         description: submissionDescription,
         deliverableUrl,
       });
+
+      const optimistic: WorkSubmission = {
+        id: `optimistic-${Date.now()}`,
+        bountyId: bounty.id,
+        submittedBy: currentUser!.id,
+        description: submissionDescription,
+        deliverableUrl,
+        status: "pending",
+        submittedAt: new Date(),
+        submitterUser: currentUser as User,
+      };
+      setWorkSubmissions((prev) => [optimistic, ...prev]);
+
       setSubmissionDescription("");
       setDeliverableUrl("");
       toast.success("Work submitted successfully!");
-      // Re-fetch submissions so the UI immediately reflects the new submission
-      const updated = await fetchWorkSubmissions(bounty.id);
-      setWorkSubmissions(updated ?? []);
     } catch (error) {
       console.error("Failed to submit work:", error);
       toast.error("Failed to submit work");

@@ -1408,7 +1408,7 @@ export default function AdminDashboard() {
                               Submission Rejected
                             </div>
                             <div className="text-sm text-red-600 dark:text-red-400">
-                              Bounty status changed back to "In Progress"
+                              Goodluck on the next one!
                             </div>
                           </div>
                         </div>
