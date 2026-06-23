@@ -29,6 +29,7 @@ import {
   RefreshCw,
   CreditCard,
   Shield,
+  Download,
 } from "lucide-react";
 import {
   Table,
@@ -77,6 +78,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ExportCompletedModal } from "@/components/payments/export-completed-modal";
 
 const STATUS_FILTERS: {
   status: BountyStatus | "ALL";
@@ -139,6 +141,7 @@ export default function AdminDashboard() {
     useState<Bounty | null>(null);
   const [winnerBounty, setWinnerBounty] = useState<Bounty | null>(null);
   const [chainFilter, setChainFilter] = useState<"MAIN" | "TEST">("TEST");
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Filtered bounties for the table
   const chainFilteredBounties = useMemo(
@@ -1032,7 +1035,30 @@ export default function AdminDashboard() {
           </>
         )}
 
-        {activeTab === "payments" && <AuthorizePaymentPanel />}
+        {activeTab === "payments" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Payments Due
+              </h2>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                onClick={() => setShowExportModal(true)}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export Completed
+              </Button>
+            </div>
+            <AuthorizePaymentPanel />
+          </div>
+        )}
+
+        <ExportCompletedModal
+          open={showExportModal}
+          onOpenChange={setShowExportModal}
+        />
 
         {activeTab === "txids" && (
           <div>
@@ -1255,219 +1281,200 @@ export default function AdminDashboard() {
         open={isManagingSubmissions}
         onOpenChange={setIsManagingSubmissions}
       >
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold flex items-center gap-2">
-              <Upload className="w-5 h-5" />
-              Review Work Submissions
-            </DialogTitle>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="pb-3 border-b border-border">
+            <div className="flex items-start gap-3">
+              <Upload className="w-4 h-4 mt-0.5 text-muted-foreground flex-shrink-0" />
+              <div>
+                <DialogTitle className="text-base font-medium leading-tight">
+                  Submissions
+                </DialogTitle>
+                {selectedBounty && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {bounties.find((b) => b.id === selectedBounty)?.title}{" "}
+                    &middot; {workSubmissions.length} submission
+                    {workSubmissions.length !== 1 ? "s" : ""}
+                  </p>
+                )}
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="space-y-6">
+          <div className="flex flex-col gap-2 py-2">
             {submissionsLoading ? (
-              <div className="flex justify-center py-8">
-                <Clock className="w-6 h-6 animate-spin" />
+              <div className="flex justify-center py-10">
+                <Clock className="w-5 h-5 animate-spin text-muted-foreground" />
               </div>
             ) : workSubmissions && workSubmissions.length > 0 ? (
-              <div className="space-y-6">
-                {workSubmissions.map((submission) => (
-                  <div
-                    key={submission.id}
-                    className="p-6 border border-slate-200 dark:border-slate-700 rounded-lg space-y-4"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="font-semibold text-slate-900 dark:text-slate-100 text-lg">
-                            {submission.submitterUser?.name || "Unknown User"}
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={
-                              submission.status === "approved"
-                                ? "text-green-600 border-green-200"
-                                : submission.status === "rejected"
-                                  ? "text-red-600 border-red-200"
-                                  : submission.status === "needs_revision"
-                                    ? "text-orange-600 border-orange-200"
-                                    : "text-yellow-600 border-yellow-200"
-                            }
-                          >
-                            {submission.status}
-                          </Badge>
-                        </div>
-
-                        <div className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-                          Submitted on:{" "}
+              workSubmissions.map((submission) => (
+                <div
+                  key={submission.id}
+                  className="border border-border rounded-lg px-3.5 py-3 space-y-3"
+                >
+                  {/* Top row: avatar + name + status */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <Avatar className="h-8 w-8 flex-shrink-0 border">
+                        <AvatarImage
+                          src={
+                            submission.submitterUser?.avatar ||
+                            "/placeholder-user.jpg"
+                          }
+                        />
+                        <AvatarFallback className="text-[11px]">
+                          {submission.submitterUser?.name?.[0] ?? "?"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium leading-tight truncate">
+                          {submission.submitterUser?.name || "Unknown User"}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
                           {format(
                             new Date(submission.submittedAt),
-                            "PPP 'at' p",
+                            "MMM d, yyyy",
                           )}
-                        </div>
-
-                        <div className="space-y-4">
-                          <div>
-                            <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2 block">
-                              Work Description:
-                            </label>
-                            <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border">
-                              <p className="text-slate-900 dark:text-slate-100 whitespace-pre-wrap">
-                                {submission.description}
-                              </p>
-                            </div>
-                          </div>
-
-                          {submission.deliverableUrl && (
-                            <div>
-                              <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2 block">
-                                Deliverable Link:
-                              </label>
-                              <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border">
-                                <a
-                                  href={submission.deliverableUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2 break-all"
-                                >
-                                  <ExternalLink className="w-4 h-4 flex-shrink-0" />
-                                  {submission.deliverableUrl}
-                                </a>
-                              </div>
-                            </div>
-                          )}
-
-                          {submission.reviewNotes && (
-                            <div>
-                              <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2 block">
-                                Review Notes:
-                              </label>
-                              <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                                <p className="text-slate-900 dark:text-slate-100">
-                                  {submission.reviewNotes}
-                                </p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                        </p>
                       </div>
                     </div>
-
-                    {submission.status === "pending" && (
-                      <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
-                        <div className="space-y-4">
-                          <div>
-                            <Label htmlFor={`review-notes-${submission.id}`}>
-                              Review Notes (optional)
-                            </Label>
-                            <Textarea
-                              id={`review-notes-${submission.id}`}
-                              placeholder="Add feedback for the submitter..."
-                              className="mt-2"
-                              rows={3}
-                            />
-                          </div>
-
-                          <div className="flex gap-3">
-                            <Button
-                              onClick={() => {
-                                const textarea = document.getElementById(
-                                  `review-notes-${submission.id}`,
-                                ) as HTMLTextAreaElement;
-                                handleSubmissionReview(
-                                  submission.id,
-                                  "approved",
-                                  textarea?.value,
-                                );
-                              }}
-                              disabled={isUpdating}
-                              className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                            >
-                              <CheckCircle2 className="w-4 h-4 mr-2" />
-                              Approve & Mark as Done
-                            </Button>
-
-                            <Button
-                              variant="destructive"
-                              onClick={() => {
-                                const textarea = document.getElementById(
-                                  `review-notes-${submission.id}`,
-                                ) as HTMLTextAreaElement;
-                                handleSubmissionReview(
-                                  submission.id,
-                                  "rejected",
-                                  textarea?.value,
-                                );
-                              }}
-                              disabled={isUpdating}
-                              className="flex-1"
-                            >
-                              <XCircle className="w-4 h-4 mr-2" />
-                              Reject
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {submission.status === "approved" && (
-                      <div className="border-t border-green-200 dark:border-green-800 pt-4">
-                        <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                          <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
-                          <div>
-                            <div className="font-semibold text-green-800 dark:text-green-200">
-                              Submission Approved
-                            </div>
-                            <div className="text-sm text-green-600 dark:text-green-400">
-                              Work has been approved and bounty status changed
-                              to "Done"
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {submission.status === "rejected" && (
-                      <div className="border-t border-red-200 dark:border-red-800 pt-4">
-                        <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                          <XCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
-                          <div>
-                            <div className="font-semibold text-red-800 dark:text-red-200">
-                              Submission Rejected
-                            </div>
-                            <div className="text-sm text-red-600 dark:text-red-400">
-                              Goodluck on the next one!
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {submission.status === "needs_revision" && (
-                      <div className="border-t border-orange-200 dark:border-orange-800 pt-4">
-                        <div className="flex items-center gap-3 p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-                          <FileText className="w-6 h-6 text-orange-600 dark:text-orange-400" />
-                          <div>
-                            <div className="font-semibold text-orange-800 dark:text-orange-200">
-                              Revision Requested
-                            </div>
-                            <div className="text-sm text-orange-600 dark:text-orange-400">
-                              Bounty status changed back to "In Progress"
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] px-2 py-0.5 rounded-full flex-shrink-0 ${
+                        submission.status === "approved"
+                          ? "text-green-700 dark:text-green-400 border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-900/20"
+                          : submission.status === "rejected"
+                            ? "text-red-700 dark:text-red-400 border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/20"
+                            : submission.status === "needs_revision"
+                              ? "text-orange-700 dark:text-orange-400 border-orange-300 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20"
+                              : "text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20"
+                      }`}
+                    >
+                      {submission.status}
+                    </Badge>
                   </div>
-                ))}
-              </div>
+
+                  {/* Description */}
+                  <p className="text-xs text-muted-foreground leading-relaxed break-words overflow-wrap-anywhere whitespace-pre-wrap pl-[42px] border-l-2 border-border ml-[14px]">
+                    {submission.description}
+                  </p>
+
+                  {/* Deliverable link */}
+                  {submission.deliverableUrl && (
+                    <a
+                      href={submission.deliverableUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline break-all pl-[42px] ml-[14px]"
+                    >
+                      <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                      {submission.deliverableUrl}
+                    </a>
+                  )}
+
+                  {/* Review notes (already set) */}
+                  {submission.reviewNotes && (
+                    <div className="ml-[14px] pl-[42px] p-2.5 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded text-xs text-yellow-800 dark:text-yellow-200">
+                      <span className="font-medium">Note: </span>
+                      {submission.reviewNotes}
+                    </div>
+                  )}
+
+                  {/* Pending — review actions */}
+                  {submission.status === "pending" && (
+                    <div className="border-t border-border pt-3 space-y-2.5">
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor={`review-notes-${submission.id}`}
+                          className="text-xs"
+                        >
+                          Review Notes{" "}
+                          <span className="text-muted-foreground font-normal">
+                            (optional)
+                          </span>
+                        </Label>
+                        <Textarea
+                          id={`review-notes-${submission.id}`}
+                          placeholder="Add feedback for the submitter..."
+                          className="text-sm min-h-[64px]"
+                          rows={2}
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            const textarea = document.getElementById(
+                              `review-notes-${submission.id}`,
+                            ) as HTMLTextAreaElement;
+                            handleSubmissionReview(
+                              submission.id,
+                              "approved",
+                              textarea?.value,
+                            );
+                          }}
+                          disabled={isUpdating}
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            const textarea = document.getElementById(
+                              `review-notes-${submission.id}`,
+                            ) as HTMLTextAreaElement;
+                            handleSubmissionReview(
+                              submission.id,
+                              "rejected",
+                              textarea?.value,
+                            );
+                          }}
+                          disabled={isUpdating}
+                          className="flex-1"
+                        >
+                          <XCircle className="w-3.5 h-3.5 mr-1.5" />
+                          Reject
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Resolved state banners */}
+                  {submission.status === "approved" && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                      <p className="text-xs text-green-700 dark:text-green-300">
+                        Approved — bounty marked as Done
+                      </p>
+                    </div>
+                  )}
+
+                  {submission.status === "rejected" && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+                      <XCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                      <p className="text-xs text-red-700 dark:text-red-300">
+                        Rejected
+                      </p>
+                    </div>
+                  )}
+
+                  {submission.status === "needs_revision" && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-md">
+                      <FileText className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400 flex-shrink-0" />
+                      <p className="text-xs text-orange-700 dark:text-orange-300">
+                        Revision requested — bounty back to In Progress
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))
             ) : (
-              <div className="text-center py-8">
-                <Upload className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
-                  No Work Submissions Yet
-                </h3>
-                <p className="text-slate-600 dark:text-slate-400">
-                  This bounty hasn't received any work submissions yet.
+              <div className="flex flex-col items-center py-10 text-center">
+                <Upload className="w-9 h-9 text-muted-foreground/40 mb-3" />
+                <p className="text-sm text-muted-foreground">
+                  No submissions yet.
                 </p>
               </div>
             )}

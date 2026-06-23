@@ -242,6 +242,7 @@ interface BountyContextType {
   setDefaultWallet: (accountName: string, teamId?: string) => Promise<void>;
 
   fetchExportPayments: (from?: string, to?: string) => Promise<any[]>;
+  fetchExportCompleted: () => Promise<any[]>;
   updateUserOfac: (userId: string, ofacVerified: boolean) => Promise<void>;
 
   // Teams
@@ -2430,6 +2431,21 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const fetchExportCompleted = async (): Promise<any[]> => {
+    if (!currentUser || currentUser.role !== "ADMIN") return [];
+    try {
+      const res = await fetch(`${backendUrl}/api/bounties/export-completed`, {
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error("Failed to fetch completed bounties");
+      const data = await res.json();
+      return data.data || [];
+    } catch (error) {
+      console.error("Failed to fetch completed bounties:", error);
+      return [];
+    }
+  };
+
   const updateUserOfac = async (
     userId: string,
     ofacVerified: boolean,
@@ -2578,6 +2594,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         importWallet,
         setDefaultWallet,
         fetchExportPayments,
+        fetchExportCompleted,
         updateUserOfac,
         teams,
         teamsLoading,

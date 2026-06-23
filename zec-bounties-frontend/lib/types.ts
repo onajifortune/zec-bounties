@@ -130,6 +130,7 @@ export interface BountyAssignee {
     email: string;
     avatar?: string;
     z_address?: string;
+    UA_address?: string;
   };
 }
 
