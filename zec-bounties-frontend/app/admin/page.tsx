@@ -160,18 +160,23 @@ export default function AdminDashboard() {
   useEffect(() => {
     const loadAllSubmissions = async () => {
       if (!currentUser) return;
+
+      const results = await Promise.allSettled(
+        bounties.map((bounty) => fetchWorkSubmissions(bounty.id)),
+      );
+
       const allSubs: WorkSubmission[] = [];
-      for (const bounty of bounties) {
-        try {
-          const subs = await fetchWorkSubmissions(bounty.id);
-          allSubs.push(...subs);
-        } catch (error) {
+      results.forEach((result, i) => {
+        if (result.status === "fulfilled") {
+          allSubs.push(...result.value);
+        } else {
           console.error(
-            `Failed to load submissions for bounty ${bounty.id}:`,
-            error,
+            `Failed to load submissions for bounty ${bounties[i].id}:`,
+            result.reason,
           );
         }
-      }
+      });
+
       setAllSubmissions(allSubs);
     };
 
