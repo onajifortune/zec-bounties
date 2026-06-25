@@ -191,6 +191,9 @@ interface BountyContextType {
   allApplications: BountyApplication[];
   bountyApplications: Record<string, BountyApplication[]>;
 
+  // Submissions
+  allSubmissions: WorkSubmission[];
+
   // Fetch methods
   fetchUserApplications: () => Promise<void>;
   fetchAllUsersApplications: () => Promise<void>;
@@ -304,6 +307,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   const [bountyApplications, setBountyApplications] = useState<
     Record<string, BountyApplication[]>
   >({});
+  const [allSubmissions, setAllSubmissions] = useState<WorkSubmission[]>([]);
   const [balance, setBalance] = useState<number | undefined>(undefined);
   const [address, setAddress] = useState<string | undefined>(undefined);
   const [addresses, setAddresses] = useState<string[]>([]);
@@ -1215,7 +1219,9 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         headers: getAuthHeaders(),
       });
       if (!res.ok) throw new Error("Failed to fetch all submissions");
-      return await res.json();
+      const data = await res.json();
+      return data;
+      setAllSubmissions(data);
     } catch (error) {
       console.error("Failed to fetch all submissions:", error);
       return [];
@@ -1700,10 +1706,14 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       fetchUserApplications();
       fetchAllUsersApplications();
       fetchZcashParams();
-      if (currentUser.role === "ADMIN") fetchTeams();
+      if (currentUser.role === "ADMIN") {
+        fetchTeams();
+        fetchAllSubmissions().then(setAllSubmissions);
+      }
     } else {
       setApplications([]);
       setAllApplications([]);
+      setAllSubmissions([]);
       setZcashParams([]);
       setTeams([]);
       setSyncStatus(null);
@@ -2607,6 +2617,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         applications,
         fetchUserApplications,
         fetchAllUsersApplications,
+        allSubmissions,
         fetchAllSubmissions,
         getAllApplicationForBounty,
         fetchBountyApplications,

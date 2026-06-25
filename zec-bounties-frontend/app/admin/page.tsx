@@ -117,6 +117,7 @@ export default function AdminDashboard() {
     paymentServerUrl,
     fetchTransactionHashes,
     currentUser,
+    allSubmissions,
     fetchAllSubmissions,
   } = useBounty();
 
@@ -133,7 +134,6 @@ export default function AdminDashboard() {
   const [workSubmissions, setWorkSubmissions] = useState<WorkSubmission[]>([]);
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [allSubmissions, setAllSubmissions] = useState<WorkSubmission[]>([]);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [isFetchingTxHashes, setIsFetchingTxHashes] = useState(false);
 
@@ -157,11 +157,6 @@ export default function AdminDashboard() {
         : chainFilteredBounties.filter((b) => b.status === bountyStatusFilter),
     [chainFilteredBounties, bountyStatusFilter],
   );
-
-  useEffect(() => {
-    if (!currentUser) return;
-    fetchAllSubmissions().then((subs) => setAllSubmissions(subs));
-  }, [currentUser]);
 
   const handleStatusChange = async (
     bountyId: string,
@@ -251,22 +246,8 @@ export default function AdminDashboard() {
   ) => {
     setIsUpdating(true);
     try {
-      await reviewWorkSubmission(submissionId, {
-        status: action,
-        reviewNotes: reviewNotes,
-      });
-      await loadWorkSubmissions();
-
-      if (action === "approved") {
-        const allSubs: WorkSubmission[] = [];
-        for (const bounty of bounties) {
-          try {
-            const subs = await fetchWorkSubmissions(bounty.id);
-            allSubs.push(...subs);
-          } catch {}
-        }
-        setAllSubmissions(allSubs);
-      }
+      await reviewWorkSubmission(submissionId, { status: action, reviewNotes });
+      await Promise.all([loadWorkSubmissions(), fetchAllSubmissions()]);
     } catch (error) {
       console.error("Failed to review submission:", error);
     } finally {
