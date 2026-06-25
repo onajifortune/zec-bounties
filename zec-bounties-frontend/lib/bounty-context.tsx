@@ -2105,7 +2105,10 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       const data = await res.json();
       setTotalBountyAmount(data.totalBountyAmount ?? 0);
       setTotalBountyCount(data.totalBountyCount ?? 0);
-      setTotalActiveCount(data.statusCounts?.IN_PROGRESS ?? 0);
+      setTotalActiveCount(
+        (data.statusCounts?.IN_PROGRESS ?? 0) +
+          (data.statusCounts?.IN_REVIEW ?? 0),
+      );
       setStatusCounts(data.statusCounts ?? {});
     } catch (error) {
       console.error("Failed to fetch bounty stats:", error);
