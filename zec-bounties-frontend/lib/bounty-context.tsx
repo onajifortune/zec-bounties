@@ -194,7 +194,13 @@ interface BountyContextType {
   bountyApplications: Record<string, BountyApplication[]>;
 
   // Submissions
+  submissions: WorkSubmission[];
   allSubmissions: WorkSubmission[];
+  bountySubmissions: Record<string, WorkSubmission[]>;
+  fetchUserSubmissions: () => Promise<void>;
+  fetchBountySubmissions: (bountyId: string) => Promise<WorkSubmission[]>;
+  getUserSubmissionForBounty: (bountyId: string) => WorkSubmission | null;
+  getAllSubmissionsForBounty: (bountyId: string) => WorkSubmission[];
 
   // Fetch methods
   fetchUserApplications: () => Promise<void>;
@@ -309,7 +315,12 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   const [bountyApplications, setBountyApplications] = useState<
     Record<string, BountyApplication[]>
   >({});
+  const [submissions, setSubmissions] = useState<WorkSubmission[]>([]);
   const [allSubmissions, setAllSubmissions] = useState<WorkSubmission[]>([]);
+  const [bountySubmissions, setBountySubmissions] = useState<
+    Record<string, WorkSubmission[]>
+  >({});
+
   const [balance, setBalance] = useState<number | undefined>(undefined);
   const [address, setAddress] = useState<string | undefined>(undefined);
   const [addresses, setAddresses] = useState<string[]>([]);
@@ -1216,6 +1227,20 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const fetchUserSubmissions = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(`${backendUrl}/api/bounties/my-submissions`, {
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error("Failed to fetch submissions");
+      const data = await res.json();
+      setSubmissions(data);
+    } catch (error) {
+      console.error("Failed to fetch submissions:", error);
+    }
+  };
+
   const fetchAllSubmissions = async (): Promise<WorkSubmission[]> => {
     if (!currentUser || currentUser.role !== "ADMIN") return [];
     try {
@@ -1224,12 +1249,42 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       });
       if (!res.ok) throw new Error("Failed to fetch all submissions");
       const data = await res.json();
-      return data;
       setAllSubmissions(data);
+      return data;
     } catch (error) {
       console.error("Failed to fetch all submissions:", error);
       return [];
     }
+  };
+
+  const fetchBountySubmissions = async (bountyId: string) => {
+    if (!currentUser) return [];
+    try {
+      const res = await fetch(
+        `${backendUrl}/api/bounties/${bountyId}/submissions`,
+        { headers: getAuthHeaders() },
+      );
+      if (!res.ok) throw new Error("Failed to fetch bounty submissions");
+      const data = await res.json();
+      setBountySubmissions((prev) => ({ ...prev, [bountyId]: data }));
+      return data;
+    } catch (error) {
+      console.error("Failed to fetch bounty submissions:", error);
+      return [];
+    }
+  };
+
+  const getUserSubmissionForBounty = (
+    bountyId: string,
+  ): WorkSubmission | null =>
+    submissions.find((s) => s.bountyId === bountyId) ?? null;
+
+  const getAllSubmissionsForBounty = (bountyId: string): WorkSubmission[] => {
+    if (bountySubmissions[bountyId]) return bountySubmissions[bountyId];
+    if (allSubmissions.length > 0)
+      return allSubmissions.filter((s) => s.bountyId === bountyId);
+    fetchBountySubmissions(bountyId);
+    return [];
   };
 
   const getUserApplicationForBounty = (
@@ -1255,64 +1310,55 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
 
   const acceptApplication = async (applicationId: string) => {
     if (!currentUser) throw new Error("User not authenticated");
+    const res = await fetch(
+      `${backendUrl}/api/bounties/applications/${applicationId}`,
+      {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status: "accepted" }),
+      },
+    );
+    if (!res.ok) throw new Error("Failed to accept application");
+    const updatedApplication = await res.json();
 
-    try {
-      const res = await fetch(
-        `${backendUrl}/api/bounties/applications/${applicationId}`,
-        {
-          method: "PUT",
-          headers: {
-            ...getAuthHeaders(),
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ status: "accepted" }),
-        },
-      );
+    // Update state directly — don't re-fetch stale cache
+    const update = (app: BountyApplication) =>
+      app.id === applicationId ? updatedApplication : app;
+    setApplications((prev) => prev.map(update));
+    setAllApplications((prev) => prev.map(update));
+    setBountyApplications((prev) => {
+      const existing = prev[updatedApplication.bountyId];
+      if (!existing) return prev;
+      return { ...prev, [updatedApplication.bountyId]: existing.map(update) };
+    });
 
-      if (!res.ok) throw new Error("Failed to accept application");
-
-      const updatedApplication = await res.json();
-      const bountyId = updatedApplication.bountyId;
-
-      await fetchBountyApplications(bountyId);
-      await fetchBounties();
-
-      return updatedApplication;
-    } catch (error) {
-      console.error("Failed to accept application:", error);
-      throw error;
-    }
+    return updatedApplication;
   };
 
   const rejectApplication = async (applicationId: string) => {
     if (!currentUser) throw new Error("User not authenticated");
+    const res = await fetch(
+      `${backendUrl}/api/bounties/applications/${applicationId}`,
+      {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status: "rejected" }),
+      },
+    );
+    if (!res.ok) throw new Error("Failed to reject application");
+    const updatedApplication = await res.json();
 
-    try {
-      const res = await fetch(
-        `${backendUrl}/api/bounties/applications/${applicationId}`,
-        {
-          method: "PUT",
-          headers: {
-            ...getAuthHeaders(),
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ status: "rejected" }),
-        },
-      );
+    const update = (app: BountyApplication) =>
+      app.id === applicationId ? updatedApplication : app;
+    setApplications((prev) => prev.map(update));
+    setAllApplications((prev) => prev.map(update));
+    setBountyApplications((prev) => {
+      const existing = prev[updatedApplication.bountyId];
+      if (!existing) return prev;
+      return { ...prev, [updatedApplication.bountyId]: existing.map(update) };
+    });
 
-      if (!res.ok) throw new Error("Failed to reject application");
-
-      const updatedApplication = await res.json();
-      const bountyId = updatedApplication.bountyId;
-
-      await fetchBountyApplications(bountyId);
-      await fetchBounties();
-
-      return updatedApplication;
-    } catch (error) {
-      console.error("Failed to reject application:", error);
-      throw error;
-    }
+    return updatedApplication;
   };
 
   const submitWork = async (
@@ -1709,6 +1755,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     if (currentUser) {
       fetchUserApplications();
       fetchAllUsersApplications();
+      fetchUserSubmissions();
       fetchZcashParams();
       if (currentUser.role === "ADMIN") {
         fetchTeams();
@@ -1718,6 +1765,9 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       setApplications([]);
       setAllApplications([]);
       setAllSubmissions([]);
+      setSubmissions([]);
+      setAllSubmissions([]);
+      setBountySubmissions({});
       setZcashParams([]);
       setTeams([]);
       setSyncStatus(null);
@@ -1809,12 +1859,17 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
                 app.id === msg.payload.id ? msg.payload : app,
               ),
             );
-            setBountyApplications((prev) => ({
-              ...prev,
-              [msg.payload.bountyId]: (prev[msg.payload.bountyId] || []).map(
-                (app) => (app.id === msg.payload.id ? msg.payload : app),
-              ),
-            }));
+            setBountyApplications((prev) => {
+              const existing = prev[msg.payload.bountyId];
+              // If this bountyId isn't loaded yet, skip — it'll be fresh on next open
+              if (!existing) return prev;
+              return {
+                ...prev,
+                [msg.payload.bountyId]: existing.map((app) =>
+                  app.id === msg.payload.id ? msg.payload : app,
+                ),
+              };
+            });
             fetchBounties();
             break;
 
@@ -1852,9 +1907,37 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
 
           case "work_submitted":
             fetchBounties();
+            // Mirror application_created pattern
+            if (msg.payload.submittedBy === currentUser?.id) {
+              setSubmissions((prev) => [...prev, msg.payload]);
+            }
+            setAllSubmissions((prev) => {
+              const exists = prev.some((s) => s.id === msg.payload.id);
+              return exists ? prev : [msg.payload, ...prev];
+            });
+            setBountySubmissions((prev) => ({
+              ...prev,
+              [msg.payload.bountyId]: [
+                ...(prev[msg.payload.bountyId] || []),
+                msg.payload,
+              ],
+            }));
             break;
 
           case "submission_reviewed":
+            // Mirror application_updated pattern
+            setSubmissions((prev) =>
+              prev.map((s) => (s.id === msg.payload.id ? msg.payload : s)),
+            );
+            setAllSubmissions((prev) =>
+              prev.map((s) => (s.id === msg.payload.id ? msg.payload : s)),
+            );
+            setBountySubmissions((prev) => ({
+              ...prev,
+              [msg.payload.bountyId]: (prev[msg.payload.bountyId] || []).map(
+                (s) => (s.id === msg.payload.id ? msg.payload : s),
+              ),
+            }));
             fetchBounties();
             break;
 
@@ -2608,7 +2691,12 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         paymentIDs,
         paymentChain,
         paymentServerUrl,
-
+        submissions,
+        bountySubmissions,
+        fetchUserSubmissions,
+        fetchBountySubmissions,
+        getUserSubmissionForBounty,
+        getAllSubmissionsForBounty,
         fetchTransactionHashes,
         authorizeDuePayment,
         deleteBounty,
