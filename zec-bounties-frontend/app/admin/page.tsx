@@ -1143,7 +1143,7 @@ export default function AdminDashboard() {
             </div>
           </DialogHeader>
 
-          <div className="flex flex-col gap-2 py-2">
+          <div className="flex flex-col gap-2 py-2 imd:max-w-2xl">
             {selectedBounty &&
             getAllApplicationsForBounty(selectedBounty)?.length > 0 ? (
               getAllApplicationsForBounty(selectedBounty).map((application) => (
@@ -1226,7 +1226,7 @@ export default function AdminDashboard() {
                   </div>
 
                   {/* Message */}
-                  <p className="mt-2.5 text-xs text-muted-foreground leading-relaxed pl-[42px] border-l-2 border-border ml-[14px]">
+                  <p className="mt-2.5 text-xs text-muted-foreground leading-relaxed pl-10.5 border-l-2 border-border ml-3.5 wrap-anywhere">
                     {application.message}
                   </p>
                 </div>
