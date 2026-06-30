@@ -57,6 +57,28 @@ export function BountyDetailModal({
   const [workSubmissions, setWorkSubmissions] = useState<WorkSubmission[]>([]);
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
 
+  const URL_REGEX = /(https?:\/\/[^\s]+)/g;
+
+  function renderDescriptionWithLinks(text: string) {
+    const parts = text.split(URL_REGEX);
+    return parts.map((part, i) =>
+      /^https?:\/\//.test(part) ? (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="text-blue-600 dark:text-blue-400 hover:underline break-all"
+        >
+          {part}
+        </a>
+      ) : (
+        <span key={i}>{part}</span>
+      ),
+    );
+  }
+
   useEffect(() => {
     if (!open || !bounty || !currentUser) return;
     const isAssigned =
@@ -273,7 +295,7 @@ export function BountyDetailModal({
                 <Shield className="h-3.5 w-3.5" /> Description
               </h4>
               <p className="text-sm text-muted-foreground leading-relaxed break-words overflow-wrap-anywhere whitespace-pre-wrap">
-                {bounty.description}
+                {renderDescriptionWithLinks(bounty.description)}
               </p>
             </div>
 
