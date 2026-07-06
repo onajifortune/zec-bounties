@@ -40,6 +40,13 @@ import {
 } from "date-fns";
 import { toast } from "sonner";
 
+function isNewBounty(dateCreated: Date | string): boolean {
+  const created = new Date(dateCreated);
+  const now = new Date();
+  const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
+  return diffHours <= 24;
+}
+
 export function BountyCard({
   bounty,
   viewMode = "grid",
@@ -129,6 +136,8 @@ export function BountyCard({
       ? "text-yellow-500 border-yellow-500/30 bg-yellow-500/10"
       : "text-muted-foreground border-border bg-muted/30";
 
+  const isNew = isNewBounty(bounty.dateCreated);
+
   const handleApply = async () => {
     if (!applicationMessage.trim()) {
       toast.error("Message required", {
@@ -186,9 +195,14 @@ export function BountyCard({
     return (
       <>
         <Card
-          className="p-1 group transition-all hover:border-primary/50 hover:shadow-md bg-card/80 backdrop-blur-sm cursor-pointer"
+          className="relative overflow-visible p-1 group transition-all hover:border-primary/50 hover:shadow-md bg-card/80 backdrop-blur-sm cursor-pointer"
           onClick={handleCardClick}
         >
+          {isNew && (
+            <span className="absolute -top-2 -right-2 z-10 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white border-2 border-background shadow-sm">
+              NEW
+            </span>
+          )}
           <div className="p-3 space-y-2.5">
             <h3 className="text-sm font-semibold leading-snug line-clamp-2 group-hover:text-primary transition-colors">
               {bounty.title}
@@ -359,9 +373,14 @@ export function BountyCard({
     return (
       <>
         <Card
-          className="group transition-all hover:border-primary/50 overflow-hidden bg-card/50 backdrop-blur-sm cursor-pointer"
+          className="relative overflow-visible group transition-all hover:border-primary/50 bg-card/50 backdrop-blur-sm cursor-pointer"
           onClick={handleCardClick}
         >
+          {isNew && (
+            <span className="absolute -top-2 -right-2 z-10 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white border-2 border-background shadow-sm">
+              NEW
+            </span>
+          )}
           <div className="flex items-center p-3 imd:p-4 gap-3 imd:gap-4">
             {/* Avatar — always visible */}
             <Avatar className="h-8 w-8 imd:h-10 imd:w-10 border shrink-0">
@@ -571,9 +590,14 @@ export function BountyCard({
   return (
     <>
       <Card
-        className="group transition-all hover:border-primary/50 overflow-hidden bg-card/50 backdrop-blur-sm cursor-pointer flex flex-col h-full"
+        className="relative overflow-visible group transition-all hover:border-primary/50 bg-card/50 backdrop-blur-sm cursor-pointer flex flex-col h-full"
         onClick={handleCardClick}
       >
+        {isNew && (
+          <span className="absolute -top-2 -right-2 z-10 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white border-2 border-background shadow-sm">
+            NEW
+          </span>
+        )}
         <CardHeader className="p-4 flex-row items-start justify-between space-y-0">
           <div className="flex gap-3 items-center">
             <Avatar className="h-10 w-10 border">
