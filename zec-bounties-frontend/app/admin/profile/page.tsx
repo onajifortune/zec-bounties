@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Navbar } from "@/components/layout/navbar";
+import { AdminNavbar } from "@/components/layout/admin/navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -255,9 +255,9 @@ export default function ProfilePage() {
   const isValidUaAddress = uaAddress.startsWith("u1");
 
   return (
-    <ProtectedRoute blockAdmin>
+    <ProtectedRoute requireAdmin>
       <div className="min-h-screen bg-background">
-        <Navbar />
+        <AdminNavbar />
 
         <main className="container max-w-2xl mx-auto py-10 px-4 space-y-6">
           {/* ── Profile header ─────────────────────────────────────────────── */}

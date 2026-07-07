@@ -19,6 +19,7 @@ export interface User {
   avatar?: string; // GitHub avatar URL
   githubId?: string; // GitHub username/ID
   isRobin: Boolean;
+  emailNotifications?: boolean;
 }
 
 export interface BountyCategory {
