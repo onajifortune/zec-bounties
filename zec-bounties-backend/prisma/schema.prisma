@@ -1,6 +1,6 @@
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -20,9 +20,11 @@ model User {
   name                 String
   email                String              @unique
   password             String?
+  nickname             String?
   role                 UserRole            @default(CLIENT)
   createdAt            DateTime            @default(now())
   z_address            String?
+  UA_address           String?
   avatar               String?
   githubId             String?
   isRobin              Boolean             @default(false)
@@ -56,6 +58,7 @@ model Bounty {
   categoryId        String?
   createdBy         String
   assignee          String?
+  chain             Chain               @default(MAIN)
   difficulty        Difficulty          @default(EASY)
   assigneeUser      User?               @relation("AssignedBounties", fields: [assignee], references: [id])
   createdByUser     User                @relation("CreatedBounties", fields: [createdBy], references: [id])
@@ -202,6 +205,11 @@ enum UserRole {
   CLIENT
   ADMIN
   TEAM
+}
+
+enum Chain {
+  MAIN
+  TEST
 }
 
 enum Difficulty {

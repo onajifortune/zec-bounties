@@ -25,3 +25,8 @@ zingolib-wrapper
 
 .DS_Store
 cream.js
+
+backup
+utils/test.js
+
+routes/.DS_Store

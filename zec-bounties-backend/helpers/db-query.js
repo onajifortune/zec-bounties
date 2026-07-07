@@ -1,5 +1,5 @@
 const { PrismaClient } = require("@prisma/client");
-const executeZingoParseAddres = require("../utils/zingoLibParseAddress.js");
+const executeZingoParseAddres = require("../utils/zingo/zingoLibParseAddress.js");
 const { resolvePayingWallet } = require("./zcash/resolvePayingWallet");
 
 const prisma = new PrismaClient();
@@ -172,6 +172,28 @@ async function verifyZaddress(z_address, params) {
   // return true;
 }
 
+async function verifyUaddress(z_address, params) {
+  const state = await executeZingoParseAddres(z_address, params);
+
+  console.log(state);
+  try {
+    const result = state[1] || state;
+    if (
+      result.status === "success" &&
+      result.chain_name + "net" === "mainnet"
+      // &&
+      // result.address_kind === "sapling"
+    ) {
+      return true;
+    } else {
+      return false;
+    }
+  } catch {
+    return null;
+  }
+  // return true;
+}
+
 module.exports = {
   buildPaymentList,
   findDueBounties,
@@ -179,4 +201,5 @@ module.exports = {
   updateDueBounties,
   storeTransactions,
   buildPaymentListGrouped,
+  verifyUaddress,
 };

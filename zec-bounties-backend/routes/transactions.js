@@ -3,7 +3,7 @@ const prisma = require("../prisma/client");
 const router = express.Router();
 const axios = require("axios");
 const { authenticate, isAdmin } = require("../middleware/auth");
-const executeZingoQuickSend = require("../utils/zingoLibQuickSend.js");
+const executeZingoQuickSend = require("../utils/zingo/zingoLibQuickSend.js");
 const { findDueBounties } = require("../helpers/db-query.js");
 const {
   buildPaymentList,
@@ -11,22 +11,24 @@ const {
   storeTransactions,
 } = require("../helpers/db-query.js");
 const { initZcashOnce } = require("../zcash/init");
-const executeZingoCli = require("../utils/zingoLib.js");
-const executeZingoCliTransactions = require("../utils/zingoLibTransactions.js");
-const executeZingoCheckBalance = require("../utils/zingoLibCheckBalance.js");
-const executeZingoCliAddresses = require("../utils/zingoLibAddresses.js");
+const executeZingoCli = require("../utils/zingo/zingoLib.js");
+const executeZingoCliTransactions = require("../utils/zingo/zingoLibTransactions.js");
+const executeZingoCheckBalance = require("../utils/zingo/zingoLibCheckBalance.js");
+const executeZingoCliAddresses = require("../utils/zingo/zingoLibAddresses.js");
 const {
   getLatestZcashParams,
   getDefaultZcashParams,
-} = require("../helpers/zcash/zcashHelper.js.js");
-const executeZingoParseAddress = require("../utils/zingoLibParseAddress.js");
-const executeZingoCliSync = require("../utils/zingoLibSync.js");
-const executeZingoCliRescan = require("../utils/zingoLibRescan.js");
-const executeZingoCliQuit = require("../utils/zingoLibQuit.js");
-const executeZingoCliBalance = require("../utils/zingoLibBalance.js");
+} = require("../helpers/zcash/zcashHelper.js");
+const executeZingoParseAddress = require("../utils/zingo/zingoLibParseAddress.js");
+const executeZingoCliSync = require("../utils/zingo/zingoLibSync.js");
+const executeZingoCliRescan = require("../utils/zingo/zingoLibRescan.js");
+const executeZingoCliRecoveryInfo = require("../utils/zingo/zingoLibRecoveryInfo.js");
+const executeZingoCliQuit = require("../utils/zingo/zingoLibQuit.js");
+const executeZingoCliBalance = require("../utils/zingo/zingoLibBalance.js");
 const { resolvePayingWallet } = require("../helpers/zcash/resolvePayingWallet");
 const { buildPaymentListGrouped } = require("../helpers/db-query");
 const { delCache, deleteCacheByPattern } = require("../utils/cache");
+const executeZingoCliInfo = require("../utils/zingo/zingoLibInfo");
 
 const { sendRealtimeUpdate, sendToUser } = require("../middleware/websocket");
 
@@ -42,7 +44,6 @@ const invalidateBounty = async (bountyId) => {
 // List transactions (Admin)
 router.get("/", authenticate, isAdmin, async (req, res) => {
   const params = await getDefaultZcashParams(req.user.id);
-  console.log(params);
   const txs = await executeZingoCliTransactions(params);
 
   // ✅ Send transactions only to the requesting admin
@@ -87,7 +88,6 @@ router.get("/balance", authenticate, isAdmin, async (req, res) => {
   if (!params) {
     await initZcashOnce((ownerId = req.user.id), (accountName = "Main"));
   }
-  console.log(params);
   const data = await executeZingoCliBalance("balance", params);
 
   console.log("balance", data);
@@ -133,7 +133,7 @@ router.get("/addresses", authenticate, isAdmin, async (req, res) => {
   const addresses = await executeZingoCliAddresses("addresses", params);
 
   try {
-    const result = addresses.encoded_address;
+    const result = addresses[0].encoded_address;
     console.log("addresses", result);
 
     // ✅ Send addresses only to the requesting admin (not broadcast)
@@ -170,6 +170,9 @@ router.post("/authorize-payment", authenticate, isAdmin, async (req, res) => {
       });
     }
 
+    const bountyChainForWallet =
+      adminWallet.chain === "mainnet" ? "MAIN" : "TEST";
+
     adminWallet.dataDir = path.join(
       process.cwd(),
       "wallets",
@@ -188,10 +191,24 @@ router.post("/authorize-payment", authenticate, isAdmin, async (req, res) => {
       },
       include: {
         assigneeUser: {
-          select: { id: true, name: true, z_address: true },
+          select: { id: true, name: true, z_address: true, UA_address: true },
         },
       },
     });
+
+    const chainMismatches = bounties.filter(
+      (b) => b.chain !== bountyChainForWallet,
+    );
+    if (chainMismatches.length > 0) {
+      return res.status(400).json({
+        error: `Chain mismatch: your default wallet is on ${adminWallet.chain} but ${chainMismatches.length} selected bounty/ies are on ${bountyChainForWallet === "MAIN" ? "testnet" : "mainnet"}. Switch your default wallet or deselect those bounties.`,
+        mismatched: chainMismatches.map((b) => ({
+          id: b.id,
+          title: b.title,
+          chain: b.chain,
+        })),
+      });
+    }
 
     if (bounties.length === 0) {
       return res.status(400).json({
@@ -207,17 +224,22 @@ router.post("/authorize-payment", authenticate, isAdmin, async (req, res) => {
     console.log(bounties);
 
     for (const bounty of bounties) {
-      if (!bounty.assigneeUser?.z_address) {
+      const payoutAddress =
+        bounty.chain === "MAIN"
+          ? bounty.assigneeUser?.UA_address
+          : bounty.assigneeUser?.z_address;
+
+      if (!payoutAddress) {
         skipped.push({
           id: bounty.id,
           title: bounty.title,
-          reason: "Assignee has no z_address",
+          reason: `Assignee has no ${bounty.chain === "MAIN" ? "UA address" : "z_address"}`,
         });
         continue;
       }
 
       paymentList.push({
-        address: bounty.assigneeUser.z_address,
+        address: payoutAddress,
         amount: Math.round(bounty.bountyAmount * 1e8), // zatoshis
         memo: `Bounty: ${bounty.title} (ID: ${bounty.id})`,
         bountyId: bounty.id,

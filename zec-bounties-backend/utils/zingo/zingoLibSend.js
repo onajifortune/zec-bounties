@@ -1,25 +1,25 @@
 const { execSync } = require("child_process");
 const { existsSync } = require("fs");
 
-async function executeZingoParseAddress(zaddress, params) {
-  const command = "parse_address";
-  if (!zaddress) throw new Error("No zaddress provided");
-
+async function executeZingoSend(params) {
+  const command = "quicksend";
   const zingoPath = process.env.ZINGO_CLI;
 
   if (!existsSync(zingoPath)) {
     throw new Error(`zingo-cli not found at ${zingoPath}`);
   }
 
-  const args = [
-    `--chain ${params.chain || "testnet"}`,
-    `--server ${params.serverUrl || "https://testnet.zec.rocks:443"}`,
-    `--data-dir ${params.dataDir || "/error"}`,
-    command,
-    zaddress,
-  ].join(" ");
+  // Convert to zatoshis
+  const amountZats = Number(params.amount);
+  const newAmountZAts = Math.ceil(amountZats);
 
-  console.log(args);
+  const args = [
+    `--server ${params.server || "http://127.0.0.1:8137"}`,
+    `--data-dir "${params.dataDir || "/mnt/d/zaino/zebra/.cache/zaino"}"`,
+    command,
+    params.address,
+    newAmountZAts.toString(),
+  ].join(" ");
 
   try {
     // 1️⃣ Run CLI and capture full output
@@ -45,7 +45,6 @@ async function executeZingoParseAddress(zaddress, params) {
       .filter(Boolean);
 
     // 5️⃣ Return array if >1 objects, or object if just 1
-    console.log("resultz", parsed);
     if (parsed.length === 1) return parsed[0];
     return parsed;
   } catch (error) {
@@ -55,4 +54,4 @@ async function executeZingoParseAddress(zaddress, params) {
   }
 }
 
-module.exports = executeZingoParseAddress;
+module.exports = executeZingoSend;

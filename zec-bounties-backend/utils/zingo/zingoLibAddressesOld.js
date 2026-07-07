@@ -1,7 +1,7 @@
 const { execSync } = require("child_process");
 const { existsSync } = require("fs");
 
-async function executeZingoCliSeed(params, seed, birthday) {
+async function executeZingoCliAddresses(command, params) {
   const zingoPath = process.env.ZINGO_CLI;
 
   if (!existsSync(zingoPath)) {
@@ -11,12 +11,11 @@ async function executeZingoCliSeed(params, seed, birthday) {
   const args = [
     `--chain ${params.chain || "mainnet"}`,
     `--server ${params.serverUrl || "http://127.0.0.1:8137"}`,
-    `--data-dir ${params.dataDir || "/mnt/d/zaino/zebra/.cache/zaino"}`,
-    `--seed "${seed}"`,
-    `--birthday ${birthday || 0}`,
+    `--data-dir "${params.dataDir || "/mnt/d/zaino/zebra/.cache/zaino"}"`,
+    command,
   ].join(" ");
 
-  console.log(args);
+  console.log("here", args);
 
   try {
     // 1️⃣ Run CLI and capture full output
@@ -24,13 +23,12 @@ async function executeZingoCliSeed(params, seed, birthday) {
       stdio: "pipe",
     }).toString();
 
-    console.log(rawOutput);
-
     // 2️⃣ Strip ANSI color codes
     const noAnsi = rawOutput.replace(/\u001b\[[0-9;]*m/g, "");
 
     // 3️⃣ Extract JSON blocks (any {…} including newlines)
-    const jsonBlocks = noAnsi.match(/\{[\s\S]*?\}/g) || [];
+    // const jsonBlocks = noAnsi.match(/\{[\s\S]*?\}/g) || [];
+    const jsonBlocks = noAnsi.match(/(\{[\s\S]*?\}|\[[\s\S]*?\])/g) || [];
 
     // 4️⃣ Parse each JSON block safely
     const parsed = jsonBlocks
@@ -42,6 +40,7 @@ async function executeZingoCliSeed(params, seed, birthday) {
         }
       })
       .filter(Boolean);
+    // console.log(parsed[1][0]);
     // 5️⃣ Return array if >1 objects, or object if just 1
     if (parsed.length === 1) return parsed[0];
     return parsed;
@@ -52,4 +51,4 @@ async function executeZingoCliSeed(params, seed, birthday) {
   }
 }
 
-module.exports = executeZingoCliSeed;
+module.exports = executeZingoCliAddresses;

@@ -1,6 +1,6 @@
 const express = require("express");
 const prisma = require("../prisma/client");
-
+const { formatEmailText } = require("../helpers/email");
 const router = express.Router();
 const { authenticate, isAdmin } = require("../middleware/auth");
 const { sendRealtimeUpdate } = require("../middleware/websocket");
@@ -11,6 +11,7 @@ const {
   deleteCacheByPattern,
   TTL,
 } = require("../utils/cache");
+const sendMail = require("../utils/sendMail");
 
 // ─── Reusable select shapes (avoids re-typing & keeps payloads small) ─────────
 const USER_SELECT = { id: true, name: true, avatar: true };
@@ -20,6 +21,7 @@ const USER_SELECT_FULL = {
   email: true,
   avatar: true,
   z_address: true,
+  UA_address: true,
 };
 const ASSIGNEE_INCLUDE = {
   assignees: {
@@ -32,14 +34,24 @@ const invalidateBounty = async (bountyId) => {
   await Promise.all([
     delCache(`bounty:${bountyId}`),
     delCache(`assignees:${bountyId}`),
+    delCache("stats:totals"),
     deleteCacheByPattern("bounties:*"),
   ]);
 };
 
-const invalidateApplications = async (applicantId) => {
+const invalidateApplications = async (applicantId, bountyId) => {
   await Promise.all([
     delCache(`applications:user:${applicantId}`),
     delCache("applications:all"),
+    ...(bountyId ? [delCache(`applications:bounty:${bountyId}`)] : []),
+  ]);
+};
+
+const invalidateSubmissions = async (bountyId, submittedBy) => {
+  await Promise.all([
+    delCache(`submissions:${bountyId}`),
+    delCache("submissions:all"),
+    ...(submittedBy ? [delCache(`submissions:user:${submittedBy}`)] : []),
   ]);
 };
 
@@ -54,7 +66,15 @@ router.post("/", authenticate, async (req, res) => {
       assignee,
       isApproved,
       categoryId,
+      chain, // NEW
     } = req.body;
+
+    if (chain && !["MAIN", "TEST"].includes(chain)) {
+      return res.status(400).json({ error: "Invalid chain value" });
+    }
+
+    const resolvedAssignee = assignee === "none" ? null : assignee;
+    const isClient = req.user.role === "CLIENT";
 
     const bounty = await prisma.bounty.create({
       data: {
@@ -63,9 +83,18 @@ router.post("/", authenticate, async (req, res) => {
         bountyAmount: parseFloat(bountyAmount),
         timeToComplete: new Date(timeToComplete),
         createdBy: req.user.id,
-        assignee: assignee === "none" ? null : assignee,
+        assignee: resolvedAssignee,
         isApproved,
         categoryId,
+        ...(chain && { chain }), // NEW — falls back to schema default (TEST) if omitted
+        ...(isClient &&
+          resolvedAssignee && {
+            assignees: {
+              create: {
+                userId: resolvedAssignee,
+              },
+            },
+          }),
       },
       include: {
         createdByUser: {
@@ -88,7 +117,38 @@ router.post("/", authenticate, async (req, res) => {
 
     sendRealtimeUpdate("new_bounties", bounty, req.user.id);
     await deleteCacheByPattern("bounties:*");
+
+    // Respond immediately — don't block on mail
     res.status(201).json(bounty);
+
+    // Fire-and-forget notification to all users
+    (async () => {
+      try {
+        const cachedUsers = await getCache("users:all");
+        const users =
+          cachedUsers ??
+          (await prisma.user.findMany({ select: { email: true } }));
+        const recipients = users.map((u) => u.email).filter(Boolean);
+
+        await sendMail({
+          to: recipients.join(","),
+          subject: `New Bounty Created: ${bounty.title}`,
+          text: `A new bounty has been created.\n\nCreated by: ${bounty.createdByUser.name}\n\nTitle: ${bounty.title}\nAmount: ${bounty.bountyAmount}`,
+          html: `
+                <h2>New Bounty Created</h2>
+                <p><strong>Created by:</strong> ${bounty.createdByUser.name}</p>
+                <p><strong>Title:</strong> ${bounty.title}</p>
+                <p><strong>Description:</strong><br/>
+                  ${formatEmailText(bounty.description)}
+                </p>
+                <p><strong>Amount:</strong> ${bounty.bountyAmount} ZEC</p>
+                <p><strong>Time to complete:</strong> ${bounty.timeToComplete}</p>
+            `,
+        });
+      } catch (mailErr) {
+        console.error("Bounty notification email failed:", mailErr);
+      }
+    })();
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to create bounty" });
@@ -487,6 +547,7 @@ router.post("/:id/submit", authenticate, async (req, res) => {
 
     sendRealtimeUpdate("work_submitted", workSubmission, userId);
     sendRealtimeUpdate("bounty_updated", updatedBounty, userId);
+    await invalidateSubmissions(bountyId, userId);
 
     res.json({
       message: "Work submitted successfully",
@@ -501,7 +562,37 @@ router.post("/:id/submit", authenticate, async (req, res) => {
   }
 });
 
-// ─── Get submissions (creator / admin) ───────────────────────────────────────
+router.get("/my-submissions", authenticate, async (req, res) => {
+  try {
+    const cacheKey = `submissions:user:${req.user.id}`;
+    const cached = await getCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const submissions = await prisma.workSubmission.findMany({
+      where: { submittedBy: req.user.id },
+      include: {
+        bounty: {
+          select: {
+            id: true,
+            title: true,
+            bountyAmount: true,
+            status: true,
+            timeToComplete: true,
+          },
+        },
+      },
+      orderBy: { submittedAt: "desc" },
+    });
+
+    await setCache(cacheKey, submissions, TTL.SUBMISSIONS);
+    res.json(submissions);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Get submissions (creator / admin / assignee) ─────────────────────────────
 router.get("/:id/submissions", authenticate, async (req, res) => {
   try {
     const { id: bountyId } = req.params;
@@ -513,14 +604,43 @@ router.get("/:id/submissions", authenticate, async (req, res) => {
       select: { id: true, createdBy: true },
     });
     if (!bounty) return res.status(404).json({ error: "Bounty not found" });
-    if (bounty.createdBy !== userId && userRole !== "ADMIN") {
+
+    const isCreatorOrAdmin =
+      bounty.createdBy === userId || userRole === "ADMIN";
+
+    let isAssignee = false;
+    if (!isCreatorOrAdmin) {
+      const assignee = await prisma.bountyAssignee.findUnique({
+        where: { bountyId_userId: { bountyId, userId } },
+        select: { userId: true },
+      });
+      isAssignee = !!assignee;
+    }
+
+    if (!isCreatorOrAdmin && !isAssignee) {
       return res
         .status(403)
         .json({ error: "You do not have permission to view submissions" });
     }
 
+    // Only cache admin/creator view — assignee view is filtered per-user
+    // so sharing a cache key would leak data or serve wrong results
+    const cacheKey = isCreatorOrAdmin ? `submissions:${bountyId}` : null;
+
+    if (cacheKey) {
+      const cached = await getCache(cacheKey);
+      if (cached) {
+        console.log("Cache sub Hit");
+        return res.json(cached);
+      }
+      console.log("Cache sub Miss");
+    }
+
     const submissions = await prisma.workSubmission.findMany({
-      where: { bountyId },
+      where: {
+        bountyId,
+        ...(!isCreatorOrAdmin && { submittedBy: userId }),
+      },
       include: {
         submitterUser: {
           select: { id: true, name: true, email: true, avatar: true },
@@ -529,21 +649,51 @@ router.get("/:id/submissions", authenticate, async (req, res) => {
       orderBy: { submittedAt: "desc" },
     });
 
-    res.json(
-      submissions.map((s) => ({
-        ...s,
-        attachments: s.attachments ? JSON.parse(s.attachments) : [],
-      })),
-    );
+    const result = submissions.map((s) => ({
+      ...s,
+      attachments: s.attachments ? JSON.parse(s.attachments) : [],
+    }));
+
+    if (cacheKey) {
+      await setCache(cacheKey, result, TTL.SUBMISSIONS);
+    }
+
+    res.json(result);
   } catch (error) {
     console.error("Error fetching submissions:", error);
     res.status(500).json({ error: "Failed to fetch submissions" });
   }
 });
 
+router.get("/submissions/all", authenticate, isAdmin, async (req, res) => {
+  try {
+    const cacheKey = "submissions:all";
+    const cached = await getCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const submissions = await prisma.workSubmission.findMany({
+      include: {
+        submitterUser: {
+          select: { id: true, name: true, email: true, avatar: true },
+        },
+      },
+      orderBy: { submittedAt: "desc" },
+    });
+
+    const result = submissions.map((s) => ({
+      ...s,
+      attachments: s.attachments ? JSON.parse(s.attachments) : [],
+    }));
+
+    await setCache(cacheKey, result, TTL.SUBMISSIONS);
+    res.json(result);
+  } catch (error) {
+    console.error("Error fetching all submissions:", error);
+    res.status(500).json({ error: "Failed to fetch submissions" });
+  }
+});
+
 // ─── Review submission ────────────────────────────────────────────────────────
-// FIX: `newBountyStatus` was referenced but never declared — this was causing
-//      a ReferenceError crash on every review, forcing retries and hammering DB.
 router.patch(
   "/submissions/:submissionId/review",
   authenticate,
@@ -668,6 +818,7 @@ router.patch(
 
       sendRealtimeUpdate("submission_reviewed", updatedSubmission, req.user.id);
       sendRealtimeUpdate("bounty_updated", updatedBounty, req.user.id);
+      await invalidateSubmissions(submission.bounty.id, submission.submittedBy);
       await invalidateBounty(submission.bounty.id);
 
       res.json({
@@ -696,6 +847,7 @@ router.get("/users", async (req, res) => {
         email: true,
         role: true,
         z_address: true,
+        UA_address: true,
         avatar: true,
       },
     });
@@ -734,6 +886,7 @@ router.patch("/switch-role", authenticate, async (req, res) => {
         isRobin: true,
         isManOfSteel: true,
         z_address: true,
+        UA_address: true,
       },
     });
     await delCache("users:all");
@@ -919,13 +1072,26 @@ router.get("/:bountyId/applications", authenticate, async (req, res) => {
       return res.status(403).json({ error: "Access denied" });
     }
 
+    const cacheKey = `applications:bounty:${bountyId}`;
+
+    const cached = await getCache(cacheKey);
+
+    if (cached) {
+      console.log("App Hit");
+      return res.json(cached);
+    }
+
     const applications = await prisma.bountyApplication.findMany({
       where: { bountyId },
       include: {
-        applicantUser: { select: { id: true, name: true, email: true } },
+        applicantUser: {
+          select: { id: true, name: true, email: true, avatar: true },
+        },
       },
       orderBy: { appliedAt: "desc" },
     });
+
+    await setCache(cacheKey, applications, TTL.APPLICATIONS);
     res.json(applications);
   } catch (err) {
     console.error(err);
@@ -980,7 +1146,10 @@ router.put(
         }
         return updated;
       });
-      await invalidateApplications(application.applicantId);
+      await invalidateApplications(
+        application.applicantId,
+        application.bountyId,
+      );
       await invalidateBounty(application.bountyId);
 
       sendRealtimeUpdate("application_updated", result, req.user.id);
@@ -1014,7 +1183,10 @@ router.delete(
           .json({ error: "Cannot withdraw a reviewed application" });
 
       await prisma.bountyApplication.delete({ where: { id: applicationId } });
-      await invalidateApplications(application.applicantId);
+      await invalidateApplications(
+        application.applicantId,
+        application.bountyId,
+      );
       await invalidateBounty(application.bountyId);
       sendRealtimeUpdate(
         "application_deleted",
@@ -1088,6 +1260,7 @@ router.get("/export-payments", authenticate, isAdmin, async (req, res) => {
             name: true,
             email: true,
             z_address: true,
+            UA_address: true,
             ofacVerified: true,
           },
         },
@@ -1099,6 +1272,7 @@ router.get("/export-payments", authenticate, isAdmin, async (req, res) => {
                 name: true,
                 email: true,
                 z_address: true,
+                UA_address: true,
                 ofacVerified: true,
               },
             },
@@ -1117,6 +1291,47 @@ router.get("/export-payments", authenticate, isAdmin, async (req, res) => {
   }
 });
 
+router.get("/export-completed", authenticate, isAdmin, async (req, res) => {
+  try {
+    const bounties = await prisma.bounty.findMany({
+      where: { status: "DONE", chain: "MAIN" },
+      include: {
+        assigneeUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            z_address: true,
+            UA_address: true,
+            ofacVerified: true,
+          },
+        },
+        assignees: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                z_address: true,
+                UA_address: true,
+                ofacVerified: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { dateCreated: "desc" },
+    });
+    res.json({ success: true, data: bounties });
+  } catch (error) {
+    console.error("Error fetching completed bounties:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch completed bounties" });
+  }
+});
+
 router.get("/stats/totals", async (req, res) => {
   try {
     const cacheKey = "stats:totals";
@@ -1127,12 +1342,14 @@ router.get("/stats/totals", async (req, res) => {
     const [totalAmountResult, countResult] = await Promise.all([
       // Sum ALL bounty amounts — no pagination, one DB round-trip
       prisma.bounty.aggregate({
+        where: { chain: "MAIN" },
         _sum: { bountyAmount: true },
         _count: { id: true },
       }),
       // Separate counts per status so the dashboard can show accurate numbers
       prisma.bounty.groupBy({
         by: ["status"],
+        where: { chain: "MAIN" },
         _count: { id: true },
       }),
     ]);
@@ -1165,7 +1382,6 @@ router.get("/:id", async (req, res) => {
     const bountyId = req.params.id;
     const cacheKey = `bounty:${bountyId}`;
 
-    // CHECK CACHE
     const cached = await getCache(cacheKey);
     if (cached) return res.json(cached);
 
@@ -1173,13 +1389,22 @@ router.get("/:id", async (req, res) => {
       where: { id: bountyId },
       include: {
         assigneeUser: {
-          select: { id: true, name: true, email: true, z_address: true },
+          select: USER_SELECT_FULL,
         },
         assignees: {
           include: {
             user: {
-              select: { id: true, name: true, email: true, z_address: true },
+              select: USER_SELECT_FULL,
             },
+          },
+        },
+        createdByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            avatar: true,
           },
         },
       },
@@ -1187,9 +1412,7 @@ router.get("/:id", async (req, res) => {
 
     if (!bounty) return res.status(404).json({ error: "Bounty not found" });
 
-    // STORE CACHE
     await setCache(cacheKey, bounty, TTL.BOUNTY_SINGLE);
-
     res.json(bounty);
   } catch (error) {
     console.error(error);
@@ -1200,6 +1423,13 @@ router.get("/:id", async (req, res) => {
 // ─── Edit bounty (Admin) ──────────────────────────────────────────────────────
 router.put("/:id", authenticate, isAdmin, async (req, res) => {
   try {
+    if (
+      req.body.chain !== undefined &&
+      !["MAIN", "TEST"].includes(req.body.chain)
+    ) {
+      return res.status(400).json({ error: "Invalid chain value" });
+    }
+
     const updated = await prisma.bounty.update({
       where: { id: req.params.id },
       data: {
@@ -1210,6 +1440,7 @@ router.put("/:id", authenticate, isAdmin, async (req, res) => {
           timeToComplete: req.body.timeToComplete,
         }),
         ...(req.body.assignee !== undefined && { assignee: req.body.assignee }),
+        ...(req.body.chain !== undefined && { chain: req.body.chain }), // NEW
         ...(req.body.isApproved !== undefined && {
           isApproved: req.body.isApproved,
           status: req.body.isApproved ? "IN_PROGRESS" : "CANCELLED",
