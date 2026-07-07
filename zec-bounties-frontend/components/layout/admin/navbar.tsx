@@ -46,6 +46,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { WalletTopupModal } from "@/components/wallet-topup-modal";
 import { useBounty } from "@/lib/bounty-context";
+import { Balance } from "@/lib/types";
 import type { SyncStatus } from "@/lib/bounty-context";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -278,6 +279,14 @@ export function AdminNavbar({
       : null);
   const activeIsTeam = !!(activeWallet?.isTeam && activeWallet?.teamId);
 
+  const confirmedTotal = (b: Balance) =>
+    ((b.confirmed_orchard_balance ?? 0) +
+      (b.confirmed_sapling_balance ?? 0) +
+      (b.confirmed_transparent_balance ?? 0)) /
+    1e8;
+
+  const fmt = (n: number) => n.toFixed(4);
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
@@ -442,14 +451,54 @@ export function AdminNavbar({
               <ActiveWalletTypePill />
 
               {/* Balance */}
-              <Button
-                variant="ghost"
-                className="gap-2 h-9 text-xs font-mono"
-                onClick={handleWalletClick}
-              >
-                <Wallet className="h-4 w-4" />
-                {balance ? `${(balance / 1e8).toFixed(4)} ZEC` : `0.0000 ZEC`}
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="gap-2 h-9 text-xs font-mono"
+                    onClick={handleWalletClick}
+                  >
+                    <Wallet className="h-4 w-4" />
+                    {balance
+                      ? `${fmt(confirmedTotal(balance))} ZEC`
+                      : `0.0000 ZEC`}
+                  </Button>
+                </TooltipTrigger>
+                {balance && (
+                  <TooltipContent
+                    side="bottom"
+                    className="text-xs space-y-1.5 min-w-[180px]"
+                  >
+                    <p className="font-semibold text-foreground mb-1">
+                      Confirmed balances
+                    </p>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Orchard</span>
+                      <span className="font-mono">
+                        {fmt(balance.confirmed_orchard_balance / 1e8)} ZEC
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Sapling</span>
+                      <span className="font-mono">
+                        {fmt(balance.confirmed_sapling_balance / 1e8)} ZEC
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Transparent</span>
+                      <span className="font-mono">
+                        {fmt(balance.confirmed_transparent_balance / 1e8)} ZEC
+                      </span>
+                    </div>
+                    <div className="border-t pt-1 flex justify-between gap-4 font-semibold">
+                      <span>Total</span>
+                      <span className="font-mono">
+                        {fmt(confirmedTotal(balance))} ZEC
+                      </span>
+                    </div>
+                  </TooltipContent>
+                )}
+              </Tooltip>
 
               {/* Refresh */}
               <Tooltip>
@@ -723,7 +772,7 @@ export function AdminNavbar({
                   >
                     <Wallet className="h-4 w-4" />
                     {balance
-                      ? `${(balance / 1e8).toFixed(4)} ZEC`
+                      ? `${fmt(confirmedTotal(balance))} ZEC`
                       : `0.0000 ZEC`}
                   </Button>
 

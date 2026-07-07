@@ -14,6 +14,7 @@ import type {
   TeamMember,
   TeamWallet,
   RecoveryData,
+  Balance,
 } from "./types";
 import { backendUrl, backendWebSpocketUrl } from "./configENV";
 
@@ -173,7 +174,7 @@ interface BountyContextType {
   nonAdminUsers: User[];
   usersLoading: boolean;
   fetchUsers: () => Promise<void>;
-  balance: number | undefined;
+  balance: Balance | undefined;
   fetchBalance: () => Promise<void>;
   address: string | undefined;
   addresses: string[];
@@ -321,7 +322,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   const [bountySubmissions, setBountySubmissions] = useState<
     Record<string, WorkSubmission[]>
   >({});
-  const [balance, setBalance] = useState<number | undefined>(undefined);
+  const [balance, setBalance] = useState<Balance | undefined>(undefined);
   const [address, setAddress] = useState<string | undefined>(undefined);
   const [addresses, setAddresses] = useState<string[]>([]);
   const [paymentIDs, setPaymentIDs] = useState<string[] | undefined>(undefined);
