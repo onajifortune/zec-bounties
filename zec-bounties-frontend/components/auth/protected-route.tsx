@@ -9,11 +9,13 @@ import { useEffect } from "react";
 interface ProtectedRouteProps {
   children: React.ReactNode;
   requireAdmin?: boolean;
+  blockAdmin?: boolean;
 }
 
 export function ProtectedRoute({
   children,
   requireAdmin = false,
+  blockAdmin = false,
 }: ProtectedRouteProps) {
   const { currentUser, isLoading } = useBounty();
   const router = useRouter();
@@ -27,11 +29,18 @@ export function ProtectedRoute({
       return;
     }
 
+    // Non-admin trying to access admin page
     if (requireAdmin && currentUser.role !== "ADMIN") {
       router.push("/home");
       return;
     }
-  }, [currentUser, requireAdmin, router, isLoading]);
+
+    // Admin trying to access non-admin page
+    if (blockAdmin && currentUser.role === "ADMIN") {
+      router.push("/admin");
+      return;
+    }
+  }, [currentUser, requireAdmin, blockAdmin, router, isLoading]);
 
   // Show loading while context is initializing
   if (isLoading) {
@@ -59,12 +68,26 @@ export function ProtectedRoute({
     );
   }
 
+  // Non-admin trying to access admin page
   if (requireAdmin && currentUser.role !== "ADMIN") {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-600 dark:text-red-400">
             Access denied. Admin privileges required.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Admin trying to access non-admin page
+  if (blockAdmin && currentUser.role === "ADMIN") {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-slate-600 dark:text-slate-400">
+            Redirecting to admin console...
           </p>
         </div>
       </div>

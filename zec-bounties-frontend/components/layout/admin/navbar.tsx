@@ -365,6 +365,13 @@ export function AdminNavbar({
               Teams
             </Link>
             <Link
+              href="/admin/profile"
+              prefetch
+              className="transition-colors hover:text-primary"
+            >
+              Profile
+            </Link>
+            <Link
               href="/admin/settings"
               prefetch
               className="transition-colors hover:text-primary"
@@ -677,6 +684,7 @@ export function AdminNavbar({
                       { href: "/admin/bounties", label: "Bounties" },
                       { href: "/admin/export", label: "Export" },
                       { href: "/admin/teams", label: "Teams" },
+                      { href: "/admin/profile", label: "Profile" },
                       { href: "/admin/settings", label: "Settings" },
                     ].map(({ href, label }) => (
                       <Link

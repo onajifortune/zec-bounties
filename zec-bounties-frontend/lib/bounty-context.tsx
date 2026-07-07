@@ -178,6 +178,7 @@ interface BountyContextType {
   address: string | undefined;
   addresses: string[];
   fetchAddresses: () => Promise<void>;
+  emailNotificationsUpdate: (enabled: boolean) => Promise<boolean | undefined>;
 
   // Sync status & rescan
   syncStatus: SyncStatus | null;
@@ -1455,6 +1456,25 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error("Failed to fetch addresses:", error);
+    }
+  };
+
+  const emailNotificationsUpdate = async (enabled: boolean) => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(`${backendUrl}/auth/update-email-notifications`, {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ emailNotifications: enabled }),
+      });
+      if (!res.ok) throw new Error("Failed to update preference");
+      const data = await res.json();
+      setCurrentUser(data.user);
+      localStorage.setItem("currentUser", JSON.stringify(data.user));
+      return true;
+    } catch (error) {
+      console.error("Failed to update email notifications:", error);
+      return false;
     }
   };
 
@@ -2745,6 +2765,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         address,
         addresses,
         fetchAddresses,
+        emailNotificationsUpdate,
         syncStatus,
         syncStatusLoading,
         syncStatusError,
