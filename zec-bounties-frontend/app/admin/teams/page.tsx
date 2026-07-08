@@ -57,6 +57,13 @@ import {
   EyeOff,
   ArrowLeft,
 } from "lucide-react";
+import type { Balance } from "@/lib/types";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -678,16 +685,24 @@ function TeamDetailPanel({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const [balance, setBalance] = useState<number | null>(null);
+  const [balance, setBalance] = useState<Balance | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
+
+  const confirmedTotal = (b: Balance) =>
+    ((b.confirmed_orchard_balance ?? 0) +
+      (b.confirmed_sapling_balance ?? 0) +
+      (b.confirmed_transparent_balance ?? 0)) /
+    1e8;
+
+  const fmt = (n: number) => n.toFixed(4);
 
   const fetchBalance = useCallback(async () => {
     if (!team.wallet) return;
     setBalanceLoading(true);
     setBalanceError(null);
     try {
-      const data = await api<{ balance: number }>(`/${team.id}/wallet/balance`);
+      const data = await api<{ balance: any }>(`/${team.id}/wallet/balance`);
       setBalance(data.balance ?? null);
     } catch (err: any) {
       setBalanceError(err.message);
@@ -907,9 +922,49 @@ function TeamDetailPanel({
               ) : balanceError ? (
                 <span className="text-xs text-destructive">{balanceError}</span>
               ) : balance !== null ? (
-                <span className="text-sm font-mono font-semibold">
-                  {(balance / 1e8).toFixed(4)} ZEC
-                </span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-sm font-mono font-semibold cursor-default underline decoration-dotted underline-offset-2">
+                        {fmt(confirmedTotal(balance))} ZEC
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="top"
+                      className="text-xs space-y-1.5 min-w-[180px]"
+                    >
+                      <p className="font-semibold text-foreground mb-1">
+                        Confirmed balances
+                      </p>
+                      <div className="flex justify-between gap-4">
+                        <span className="text-muted-foreground">Orchard</span>
+                        <span className="font-mono">
+                          {fmt(balance.confirmed_orchard_balance / 1e8)} ZEC
+                        </span>
+                      </div>
+                      <div className="flex justify-between gap-4">
+                        <span className="text-muted-foreground">Sapling</span>
+                        <span className="font-mono">
+                          {fmt(balance.confirmed_sapling_balance / 1e8)} ZEC
+                        </span>
+                      </div>
+                      <div className="flex justify-between gap-4">
+                        <span className="text-muted-foreground">
+                          Transparent
+                        </span>
+                        <span className="font-mono">
+                          {fmt(balance.confirmed_transparent_balance / 1e8)} ZEC
+                        </span>
+                      </div>
+                      <div className="border-t pt-1 flex justify-between gap-4 font-semibold">
+                        <span>Total</span>
+                        <span className="font-mono">
+                          {fmt(confirmedTotal(balance))} ZEC
+                        </span>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               ) : (
                 <span className="text-xs text-muted-foreground">—</span>
               )}
