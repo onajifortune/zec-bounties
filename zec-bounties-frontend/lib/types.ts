@@ -210,3 +210,28 @@ export type Balance = {
   unconfirmed_transparent_balance: number;
   total_transparent_balance: number;
 };
+
+/*
+ * UNIFIED ADDRESS DECODER
+ * Uses @elemental-zcash/zaddr_wasm_parser (Rust → WASM)
+ * Browser equivalent of: zcash-cli z_listunifiedreceivers <address>
+ */
+
+export interface AddressReceivers {
+  p2pkh: string | null;
+  p2sh: string | null;
+  sapling: string | null;
+  orchard: string | null;
+  tex: string | null;
+}
+
+export interface ZaddrModuleAny {
+  initWasm?: () => Promise<void>;
+  isZcashAddressValid?: (addr: string) => boolean;
+  getZcashAddressType?: (addr: string) => string;
+  getAddressReceivers?: (addr: string) => AddressReceivers;
+  is_valid_zcash_address?: (addr: string) => boolean;
+  get_zcash_address_type?: (addr: string) => string;
+  get_address_receivers?: (addr: string) => AddressReceivers;
+  [key: string]: unknown;
+}
