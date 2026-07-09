@@ -279,10 +279,6 @@ export function BountyDetailModal({
               <Clock className="h-3 w-3" />
               {format(bounty.dateCreated, "MMM dd, yyyy")}
             </span>
-            <span className="flex items-center gap-1 text-xs">
-              <Users className="h-3 w-3" />
-              {bounty.applications?.length || 0} applications
-            </span>
           </DialogDescription>
         </DialogHeader>
 
