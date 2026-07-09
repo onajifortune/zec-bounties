@@ -35,7 +35,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { getAddressReceivers, initAddressDecoder } from "@/lib/decodeAddress";
 import { ProtectedRoute } from "@/components/auth/protected-route";
-import { Navbar } from "@/components/layout/navbar";
+import { AdminNavbar } from "@/components/layout/admin/navbar";
 import { backendUrl } from "@/lib/configENV";
 import { confirmedTotal, fmt } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -365,7 +365,7 @@ export default function KpisDashboard() {
   return (
     <ProtectedRoute>
       <main className="min-h-screen bg-background">
-        <Navbar />
+        <AdminNavbar />
         <div className="max-w-7xl mx-auto px-6 py-8 bg-background min-h-screen text-foreground">
           {/* Header */}
           <div className="flex justify-between items-center mb-8">
