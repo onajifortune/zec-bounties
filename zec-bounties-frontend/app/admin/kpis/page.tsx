@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowUpDown, Zap, RefreshCw } from "lucide-react";
+import { ArrowUpDown, Zap } from "lucide-react";
 import {
   ResponsiveContainer,
   BarChart,
@@ -21,24 +21,47 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  AreaChart,
+  Area,
+  Legend,
 } from "recharts";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { getAddressReceivers, initAddressDecoder } from "@/lib/decodeAddress";
-import { confirmedTotal, fmt } from "@/lib/utils";
-import { backendUrl } from "@/lib/configENV";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { AdminNavbar } from "@/components/layout/admin/navbar";
+import { backendUrl } from "@/lib/configENV";
+import { confirmedTotal, fmt } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 type SortKey = "completed" | "submitted" | "completionRate" | "totalEarned";
-type ChartType = "contributors" | "earned" | "addressTypes";
+type ChartType = "contributors" | "earned" | "bountyTypes" | "addressTypes";
+
+const CHART_PALETTE = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+  "var(--primary)",
+];
 
 export default function KpisDashboard() {
   const {
     currentUser,
-    bounties,
     balance,
     syncStatus,
     fetchBalance,
     rescanWallet,
+    zcashParams,
+    teams,
+    setDefaultWallet,
   } = useBounty();
 
   const isAdmin = currentUser?.role === "ADMIN";
@@ -60,18 +83,60 @@ export default function KpisDashboard() {
   const [loadingContributors, setLoadingContributors] = useState(true);
   const [selectedChart, setSelectedChart] = useState<ChartType>("contributors");
 
-  // === Basic counts from bounties ===
-  const totalBounties = bounties.length;
-  const completedBounties = bounties.filter((b) => b.status === "DONE").length;
-  const activeBounties = bounties.filter(
-    (b) => b.status === "TO_DO" || b.status === "IN_PROGRESS",
-  ).length;
+  const [contributorsOverTimeData, setContributorsOverTimeData] = useState<
+    any[]
+  >([]);
+  const [bountyTypesOverTime, setBountyTypesOverTime] = useState<any[]>([]);
 
-  const uniqueContributors = new Set(
-    bounties.filter((b) => b.assigneeUser).map((b) => b.assigneeUser!.id),
-  ).size;
+  // === Wallet Selector ===
+  const [selectedWalletId, setSelectedWalletId] = useState<string>("");
 
-  // Reset showAllUsers when switching to Public
+  const availableWallets = useMemo(() => {
+    if (!zcashParams) return [];
+    return zcashParams.map((p: any) => {
+      const team = teams?.find((t: any) => t.id === p.teamId);
+      return { ...p, teamName: team?.name };
+    });
+  }, [zcashParams, teams]);
+
+  const currentWallet = useMemo(() => {
+    return (
+      availableWallets.find((w: any) => w.id === selectedWalletId) ||
+      availableWallets.find((w: any) => w.isDefault) ||
+      availableWallets[0]
+    );
+  }, [availableWallets, selectedWalletId]);
+
+  useEffect(() => {
+    if (availableWallets.length > 0 && !selectedWalletId) {
+      const defaultWallet =
+        availableWallets.find((w: any) => w.isDefault) || availableWallets[0];
+      if (defaultWallet) setSelectedWalletId(defaultWallet.id);
+    }
+  }, [availableWallets]);
+
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((w) => w[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  const handleWalletChange = async (walletId: string) => {
+    const wallet = availableWallets.find((w: any) => w.id === walletId);
+    if (!wallet) return;
+
+    setSelectedWalletId(walletId);
+    try {
+      await setDefaultWallet(wallet.accountName, wallet.teamId);
+    } catch (error) {
+      console.error("Failed to switch wallet:", error);
+    }
+  };
+
+  // Reset showAllUsers
   useEffect(() => {
     if (viewMode === "public" && showAllUsers) {
       setShowAllUsers(false);
@@ -94,7 +159,6 @@ export default function KpisDashboard() {
             },
           },
         );
-
         if (!res.ok) throw new Error("Failed to fetch");
 
         let data = await res.json();
@@ -112,7 +176,6 @@ export default function KpisDashboard() {
             return user;
           });
         }
-
         setTopContributors(data);
       } catch (error) {
         console.error(error);
@@ -121,14 +184,51 @@ export default function KpisDashboard() {
         setLoadingContributors(false);
       }
     };
-
     loadData();
   }, [isAdmin, showAllUsers]);
 
-  // === sortedContributors (must come before totalZecPaid) ===
+  // Fetch time series data
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await fetch(
+          `${backendUrl}/api/kpis/contributors-over-time`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+            },
+          },
+        );
+        if (res.ok) setContributorsOverTimeData(await res.json());
+      } catch {}
+    };
+    fetchData();
+  }, []);
+
+  useEffect(() => {
+    if (viewMode !== "admin") return;
+
+    const fetchBountyTypes = async () => {
+      try {
+        const res = await fetch(
+          `${backendUrl}/api/kpis/bounty-types-over-time`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+            },
+          },
+        );
+        if (res.ok) setBountyTypesOverTime(await res.json());
+      } catch {}
+    };
+    fetchBountyTypes();
+  }, [viewMode]);
+
+  // Derived values
   const sortedContributors = useMemo(() => {
     return [...topContributors].sort((a, b) => {
       let valA: number, valB: number;
+
       if (sortKey === "completed") {
         valA = a.completed;
         valB = b.completed;
@@ -142,42 +242,42 @@ export default function KpisDashboard() {
         valA = a.submitted > 0 ? (a.completed / a.submitted) * 100 : 0;
         valB = b.submitted > 0 ? (b.completed / b.submitted) * 100 : 0;
       }
+
       return sortDirection === "desc" ? valB - valA : valA - valB;
     });
   }, [topContributors, sortKey, sortDirection]);
 
-  // === Total ZEC Paid (now correctly after sortedContributors) ===
-  const totalZecPaid = useMemo(() => {
-    return sortedContributors.reduce((sum, user) => {
-      return sum + (user.totalEarned || 0);
-    }, 0);
-  }, [sortedContributors]);
+  const totalBounties = useMemo(
+    () => topContributors.reduce((sum, u) => sum + (u.submitted || 0), 0),
+    [topContributors],
+  );
 
-  // === Analytics Data ===
-  const contributorsOverTime = useMemo(() => {
-    if (!topContributors || topContributors.length === 0) return [];
-    return topContributors.slice(0, 12).map((user, index) => ({
-      name: user.name,
-      count: index + 1,
-    }));
-  }, [topContributors]);
+  const completedBounties = useMemo(
+    () => topContributors.reduce((sum, u) => sum + (u.completed || 0), 0),
+    [topContributors],
+  );
+
+  const activeBounties = totalBounties - completedBounties;
+  const uniqueContributors = topContributors.length;
+
+  const totalZecPaid = useMemo(
+    () => sortedContributors.reduce((sum, u) => sum + (u.totalEarned || 0), 0),
+    [sortedContributors],
+  );
 
   const earnedOverTime = useMemo(() => {
-    if (!topContributors || topContributors.length === 0) return [];
+    if (!topContributors.length) return [];
     let cumulative = 0;
     return topContributors.slice(0, 12).map((user) => {
       cumulative += user.totalEarned || 0;
-      return {
-        month: user.name,
-        total: cumulative / 100_000_000,
-      };
+      return { month: user.name, total: cumulative };
     });
   }, [topContributors]);
 
   const addressTypeDistribution = useMemo(() => {
     const counts: Record<string, number> = {};
-    topContributors.forEach((user) => {
-      const type = user.addressType || "None";
+    topContributors.forEach((u) => {
+      const type = u.addressType || "None";
       counts[type] = (counts[type] || 0) + 1;
     });
     return Object.entries(counts).map(([type, count]) => ({ type, count }));
@@ -192,17 +292,19 @@ export default function KpisDashboard() {
     }
   };
 
-  // Button handlers
+  // Handlers
   const handleRefreshBalance = async () => {
     setIsRefreshingBalance(true);
     setRescanMessage("");
     setRescanError("");
+
     try {
       await fetchBalance();
+      await new Promise((r) => setTimeout(r, 400));
       setRescanMessage("Balance refreshed");
-      setTimeout(() => setRescanMessage(""), 2000);
+      setTimeout(() => setRescanMessage(""), 2500);
     } catch {
-      setRescanError("Failed to refresh balance");
+      setRescanError("Failed to refresh");
       setTimeout(() => setRescanError(""), 3000);
     } finally {
       setIsRefreshingBalance(false);
@@ -213,22 +315,24 @@ export default function KpisDashboard() {
     setIsRescanning(true);
     setRescanMessage("");
     setRescanError("");
+
     try {
       await rescanWallet();
-      setRescanMessage("Rescan triggered successfully");
-      setTimeout(() => setRescanMessage(""), 3000);
+      setRescanMessage("Rescan triggered");
+      setTimeout(() => setRescanMessage(""), 4000);
     } catch {
-      setRescanError("Failed to trigger rescan");
+      setRescanError("Failed to rescan");
       setTimeout(() => setRescanError(""), 3000);
     } finally {
       setIsRescanning(false);
     }
   };
 
-  // NOTE: these badges intentionally keep fixed brand colors (emerald/blue/indigo/slate)
-  // since they encode a semantic address-type meaning, not a light/dark theme concern.
+  // Address Type Helpers (fixed semantic colors — not theme-dependent)
   const getAddressTypeBadge = (type: string) => {
     const normalized = type.toLowerCase();
+    if (normalized === "none")
+      return "bg-red-500/20 text-red-500 dark:text-red-400 border border-red-500/30";
     if (normalized.includes("orchard") && normalized.includes("sapling"))
       return "bg-gradient-to-r from-emerald-500 to-blue-500 text-white";
     if (normalized.includes("orchard"))
@@ -246,6 +350,7 @@ export default function KpisDashboard() {
 
   const getDisplayAddressType = (type: string) => {
     const normalized = type.toLowerCase();
+    if (normalized === "none") return "No UA";
     if (normalized.includes("orchard") && normalized.includes("sapling"))
       return "Orchard + Sapling";
     if (normalized.includes("orchard")) return "Orchard";
@@ -263,9 +368,9 @@ export default function KpisDashboard() {
         <AdminNavbar />
         <div className="max-w-7xl mx-auto px-6 py-8 bg-background min-h-screen text-foreground">
           {/* Header */}
-          <div className="flex flex-col imd:flex-row imd:items-center justify-between mb-8 gap-4 imd:gap-0">
+          <div className="flex justify-between items-center mb-8">
             <div>
-              <h1 className="text-xl imd:text-4xl font-bold tracking-tight">
+              <h1 className="text-4xl font-bold tracking-tight">
                 Platform Dashboard
               </h1>
               <p className="text-muted-foreground mt-1">
@@ -274,7 +379,7 @@ export default function KpisDashboard() {
             </div>
 
             {isAdmin && (
-              <div className="flex items-center gap-1 bg-muted p-1 rounded-lg w-fit">
+              <div className="flex items-center gap-1 bg-muted p-1 rounded-lg">
                 <Button
                   variant={viewMode === "public" ? "default" : "ghost"}
                   size="sm"
@@ -293,7 +398,7 @@ export default function KpisDashboard() {
             )}
           </div>
 
-          {/* Stats Cards */}
+          {/* Top Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
             {[
               { label: "Total Bounties", value: totalBounties },
@@ -309,7 +414,7 @@ export default function KpisDashboard() {
               },
               {
                 label: "Total ZEC Paid",
-                value: (totalZecPaid / 100_000_000).toFixed(4),
+                value: totalZecPaid.toFixed(4),
                 color: "text-primary",
               },
               { label: "Unique Contributors", value: uniqueContributors },
@@ -331,14 +436,13 @@ export default function KpisDashboard() {
             ))}
           </div>
 
-          {/* Top Contributors / All Users Table */}
+          {/* Table */}
           <Card className="bg-card border-border mb-8">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>
                   {showAllUsers ? "All Users" : "Top Contributors (Top 25)"}
                 </CardTitle>
-
                 <div className="w-[170px] flex justify-end">
                   {isAdmin && viewMode === "admin" && (
                     <Button
@@ -368,34 +472,36 @@ export default function KpisDashboard() {
                       <TableHead className="w-12">Avatar</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead
-                        className="cursor-pointer select-none hover:text-foreground"
+                        className="cursor-pointer"
                         onClick={() => toggleSort("completed")}
                       >
-                        Completed <ArrowUpDown className="w-4 h-4" />
+                        Completed <ArrowUpDown className="inline w-4 h-4" />
                       </TableHead>
                       <TableHead
-                        className="cursor-pointer select-none hover:text-foreground"
+                        className="cursor-pointer"
                         onClick={() => toggleSort("submitted")}
                       >
-                        Submitted <ArrowUpDown className="w-4 h-4" />
+                        Submitted <ArrowUpDown className="inline w-4 h-4" />
                       </TableHead>
                       {viewMode === "admin" && (
                         <TableHead>Address Type</TableHead>
                       )}
                       {viewMode === "admin" && (
                         <TableHead
-                          className="cursor-pointer select-none text-right hover:text-foreground"
+                          className="text-right cursor-pointer"
                           onClick={() => toggleSort("totalEarned")}
                         >
-                          Total ZEC Earned <ArrowUpDown className="w-4 h-4" />
+                          Total ZEC Earned{" "}
+                          <ArrowUpDown className="inline w-4 h-4" />
                         </TableHead>
                       )}
                       {viewMode === "admin" && (
                         <TableHead
-                          className="cursor-pointer select-none text-right hover:text-foreground"
+                          className="text-right cursor-pointer"
                           onClick={() => toggleSort("completionRate")}
                         >
-                          Completion % <ArrowUpDown className="w-4 h-4" />
+                          Completion %{" "}
+                          <ArrowUpDown className="inline w-4 h-4" />
                         </TableHead>
                       )}
                     </TableRow>
@@ -429,7 +535,6 @@ export default function KpisDashboard() {
                               {user.avatar ? (
                                 <img
                                   src={user.avatar}
-                                  alt=""
                                   className="w-8 h-8 rounded-full border border-border"
                                 />
                               ) : (
@@ -481,7 +586,7 @@ export default function KpisDashboard() {
           {viewMode === "admin" && (
             <Card className="bg-card border-border mb-8">
               <CardHeader>
-                <div className="flex flex-col imd:flex-row gap-4 imd:gap-0 items-baseline justify-between">
+                <div className="flex items-center justify-between">
                   <CardTitle>Analytics</CardTitle>
                   <select
                     value={selectedChart}
@@ -492,6 +597,7 @@ export default function KpisDashboard() {
                   >
                     <option value="contributors">Contributors Over Time</option>
                     <option value="earned">Total ZEC Earned Over Time</option>
+                    <option value="bountyTypes">Bounty Types Over Time</option>
                     <option value="addressTypes">
                       Address Type Distribution
                     </option>
@@ -499,30 +605,35 @@ export default function KpisDashboard() {
                 </div>
               </CardHeader>
 
-              <CardContent className="h-[320px]">
+              <CardContent className="h-[340px]">
                 {selectedChart === "contributors" && (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={contributorsOverTime}>
+                    <AreaChart data={contributorsOverTimeData}>
                       <CartesianGrid
                         strokeDasharray="3 3"
                         stroke="var(--border)"
                       />
-                      <XAxis dataKey="name" stroke="var(--muted-foreground)" />
+                      <XAxis dataKey="month" stroke="var(--muted-foreground)" />
                       <YAxis stroke="var(--muted-foreground)" />
                       <Tooltip
                         cursor={{ fill: "var(--muted)", opacity: 0.4 }}
                         contentStyle={{
                           backgroundColor: "var(--popover)",
-                          borderColor: "var(--border)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "6px",
                           color: "var(--popover-foreground)",
                         }}
                       />
-                      <Bar
-                        dataKey="count"
+                      <Legend />
+                      <Area
+                        type="monotone"
+                        dataKey="cumulativeContributors"
+                        name="Cumulative Contributors"
+                        stroke="var(--chart-1)"
                         fill="var(--chart-1)"
-                        radius={[4, 4, 0, 0]}
+                        fillOpacity={0.2}
                       />
-                    </BarChart>
+                    </AreaChart>
                   </ResponsiveContainer>
                 )}
 
@@ -539,15 +650,53 @@ export default function KpisDashboard() {
                         cursor={{ fill: "var(--muted)", opacity: 0.4 }}
                         contentStyle={{
                           backgroundColor: "var(--popover)",
-                          borderColor: "var(--border)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "6px",
                           color: "var(--popover-foreground)",
                         }}
                       />
+                      <Legend />
                       <Bar
                         dataKey="total"
+                        name="Total ZEC Earned"
                         fill="var(--chart-2)"
                         radius={[4, 4, 0, 0]}
+                        activeBar={false}
                       />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+
+                {selectedChart === "bountyTypes" && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={bountyTypesOverTime}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="var(--border)"
+                      />
+                      <XAxis dataKey="month" stroke="var(--muted-foreground)" />
+                      <YAxis stroke="var(--muted-foreground)" />
+                      <Tooltip
+                        cursor={{ fill: "var(--muted)", opacity: 0.4 }}
+                        contentStyle={{
+                          backgroundColor: "var(--popover)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "6px",
+                          color: "var(--popover-foreground)",
+                        }}
+                      />
+                      <Legend />
+                      {bountyTypesOverTime.length > 0 &&
+                        Object.keys(bountyTypesOverTime[0])
+                          .filter((k) => k !== "month")
+                          .map((category, index) => (
+                            <Bar
+                              key={index}
+                              dataKey={category}
+                              stackId="a"
+                              fill={CHART_PALETTE[index % CHART_PALETTE.length]}
+                            />
+                          ))}
                     </BarChart>
                   </ResponsiveContainer>
                 )}
@@ -565,14 +714,18 @@ export default function KpisDashboard() {
                         cursor={{ fill: "var(--muted)", opacity: 0.4 }}
                         contentStyle={{
                           backgroundColor: "var(--popover)",
-                          borderColor: "var(--border)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "6px",
                           color: "var(--popover-foreground)",
                         }}
                       />
+                      <Legend />
                       <Bar
                         dataKey="count"
+                        name="Count"
                         fill="var(--chart-4)"
                         radius={[4, 4, 0, 0]}
+                        activeBar={false}
                       />
                     </BarChart>
                   </ResponsiveContainer>
@@ -580,59 +733,126 @@ export default function KpisDashboard() {
               </CardContent>
             </Card>
           )}
-
           {/* Admin Wallet Widget */}
           {viewMode === "admin" && (
             <Card className="bg-card border-border">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Zap className="w-5 h-5 text-primary" /> Wallet &amp; Node
+                  <Zap className="w-5 h-5 text-primary" /> Wallet
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex justify-between items-end">
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      Current Balance
-                    </p>
-                    <p className="text-4xl font-bold tracking-tighter">
-                      {balance
-                        ? `${fmt(confirmedTotal(balance))} ZEC`
-                        : `0.0000 ZEC`}
-                    </p>
-                  </div>
+                {/* Wallet Selector */}
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">
+                    Active Wallet
+                  </Label>
+                  <Select
+                    value={selectedWalletId}
+                    onValueChange={handleWalletChange}
+                  >
+                    <SelectTrigger className="w-full min-w-[280px] bg-background border-input h-auto py-2.5">
+                      <SelectValue>
+                        {currentWallet ? (
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={cn(
+                                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold shrink-0",
+                                currentWallet.isTeam
+                                  ? "bg-violet-500/20 text-violet-500 dark:text-violet-400"
+                                  : "bg-sky-500/20 text-sky-500 dark:text-sky-400",
+                              )}
+                            >
+                              {getInitials(currentWallet.accountName || "UA")}
+                            </div>
+                            <div className="flex flex-col items-start min-w-0 flex-1">
+                              <span className="text-sm font-medium truncate max-w-[220px]">
+                                {currentWallet.accountName || "Unnamed Wallet"}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground">
+                                {currentWallet.isTeam ? "Team" : "Personal"}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          "No wallet selected"
+                        )}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="min-w-[320px]">
+                      {availableWallets.map((wallet: any) => (
+                        <SelectItem
+                          key={wallet.id}
+                          value={wallet.id}
+                          className="py-2.5"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={cn(
+                                "w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0",
+                                wallet.isTeam
+                                  ? "bg-violet-500/20 text-violet-500 dark:text-violet-400"
+                                  : "bg-sky-500/20 text-sky-500 dark:text-sky-400",
+                              )}
+                            >
+                              {getInitials(wallet.accountName || "UA")}
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="font-medium">
+                                {wallet.accountName || "Unnamed"}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground">
+                                {wallet.isTeam ? "Team" : "Personal"}
+                              </span>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Balance */}
+                <div>
+                  <p className="text-sm text-muted-foreground">
+                    Current Balance
+                  </p>
+                  <p className="text-4xl font-bold tracking-tighter">
+                    {balance
+                      ? `${fmt(confirmedTotal(balance))} ZEC`
+                      : `0.0000 ZEC`}
+                  </p>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-2">
                   <Button
                     onClick={handleRefreshBalance}
                     variant="outline"
                     size="sm"
                     disabled={isRefreshingBalance}
+                    className="flex-1"
                   >
-                    {isRefreshingBalance ? "Refreshing..." : "Refresh"}
+                    {isRefreshingBalance ? "Refreshing..." : "Refresh Balance"}
+                  </Button>
+                  <Button
+                    onClick={handleRescan}
+                    variant="outline"
+                    size="sm"
+                    disabled={isRescanning}
+                    className="flex-1"
+                  >
+                    {isRescanning ? "Rescanning..." : "Rescan"}
                   </Button>
                 </div>
 
-                {syncStatus && (
-                  <div className="text-sm text-muted-foreground">
-                    Sync Progress:{" "}
-                    {syncStatus.percentage_total_blocks_scanned?.toFixed(1)}%
-                  </div>
-                )}
-
-                <Button
-                  onClick={handleRescan}
-                  className="w-full"
-                  disabled={isRescanning}
-                >
-                  {isRescanning ? "Rescanning..." : "Trigger Rescan"}
-                </Button>
-
                 {rescanMessage && (
-                  <p className="text-sm text-center text-emerald-500 dark:text-emerald-400">
+                  <p className="text-sm text-emerald-500 dark:text-emerald-400 text-center">
                     {rescanMessage}
                   </p>
                 )}
                 {rescanError && (
-                  <p className="text-sm text-center text-destructive">
+                  <p className="text-sm text-destructive text-center">
                     {rescanError}
                   </p>
                 )}
