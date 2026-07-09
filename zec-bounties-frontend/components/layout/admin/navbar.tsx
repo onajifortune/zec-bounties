@@ -381,6 +381,13 @@ export function AdminNavbar({
               Profile
             </Link>
             <Link
+              href="/admin/kpis"
+              prefetch
+              className="transition-colors hover:text-primary"
+            >
+              KPIs
+            </Link>
+            <Link
               href="/admin/settings"
               prefetch
               className="transition-colors hover:text-primary"
@@ -734,6 +741,7 @@ export function AdminNavbar({
                       { href: "/admin/export", label: "Export" },
                       { href: "/admin/teams", label: "Teams" },
                       { href: "/admin/profile", label: "Profile" },
+                      { href: "/admin/kpis", label: "KPIs" },
                       { href: "/admin/settings", label: "Settings" },
                     ].map(({ href, label }) => (
                       <Link
