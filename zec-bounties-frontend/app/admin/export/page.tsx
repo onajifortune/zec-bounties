@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { useBounty } from "@/lib/bounty-context";
 import { AdminNavbar } from "@/components/layout/admin/navbar";
+import { ProtectedRoute } from "@/components/auth/protected-route";
 import type { Bounty } from "@/lib/types";
 
 const BOUNTY_BASE_URL =
@@ -91,176 +92,185 @@ function BountyDetailPanel({ bounty }: { bounty: Bounty }) {
   const createdDate = bounty.dateCreated ? new Date(bounty.dateCreated) : null;
 
   return (
-    <div className="space-y-8">
-      {/* Title + status */}
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <h2 className="text-xl font-semibold leading-snug max-w-lg">
-            {bounty.title}
-          </h2>
-          <Badge
-            variant="outline"
-            className={`text-xs px-2.5 py-1 font-medium shrink-0 ${STATUS_STYLES[bounty.status] ?? ""}`}
-          >
-            {STATUS_LABELS[bounty.status] ?? bounty.status}
-          </Badge>
-        </div>
+    <ProtectedRoute>
+      <main className="min-h-screen bg-background">
+        <div className="space-y-8">
+          {/* Title + status */}
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <h2 className="text-xl font-semibold leading-snug max-w-lg">
+                {bounty.title}
+              </h2>
+              <Badge
+                variant="outline"
+                className={`text-xs px-2.5 py-1 font-medium shrink-0 ${STATUS_STYLES[bounty.status] ?? ""}`}
+              >
+                {STATUS_LABELS[bounty.status] ?? bounty.status}
+              </Badge>
+            </div>
 
-        {/* Meta */}
-        <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <Coins className="w-4 h-4 text-amber-500" />
-            <span className="font-semibold text-foreground">
-              {bounty.bountyAmount} ZEC
-            </span>
-          </span>
-          {deadlineDate && (
-            <span className="flex items-center gap-1.5">
-              <Clock className="w-4 h-4" />
-              Deadline:{" "}
-              {deadlineDate.toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </span>
-          )}
-          {createdDate && (
-            <span className="flex items-center gap-1.5">
-              <Calendar className="w-4 h-4" />
-              Created:{" "}
-              {createdDate.toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </span>
-          )}
-          {bounty.category?.name && (
-            <span className="flex items-center gap-1.5">
-              <Tag className="w-4 h-4" />
-              {bounty.category.name}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <Separator />
-
-      {/* Description */}
-      {bounty.description && (
-        <section className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Description
-          </p>
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">
-            {bounty.description}
-          </p>
-        </section>
-      )}
-
-      {/* Assignees */}
-      {bounty.assignees && bounty.assignees.length > 0 && (
-        <section className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {bounty.assignees.length === 1 ? "Assignee" : "Assignees"}
-          </p>
-          <div className="flex flex-wrap gap-3">
-            {bounty.assignees.map((a) => {
-              const user = a.user;
-              return (
-                <div
-                  key={a.userId ?? user?.id}
-                  className="flex items-center gap-2 border rounded-lg px-3 py-2 bg-muted/40"
-                >
-                  <Avatar className="w-6 h-6">
-                    {user?.avatar && (
-                      <AvatarImage src={user.avatar} alt={user.name ?? ""} />
-                    )}
-                    <AvatarFallback className="text-xs">
-                      {user?.name?.[0]?.toUpperCase() ?? (
-                        <User className="w-3 h-3" />
-                      )}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="text-sm">
-                    <p className="font-medium leading-none">
-                      {user?.name ?? "—"}
-                    </p>
-                    {user?.email && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {user.email}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* Creator */}
-      {bounty.createdByUser && (
-        <section className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Posted by
-          </p>
-          <div className="flex items-center gap-2">
-            <Avatar className="w-6 h-6">
-              {bounty.createdByUser.avatar && (
-                <AvatarImage
-                  src={bounty.createdByUser.avatar}
-                  alt={bounty.createdByUser.name ?? ""}
-                />
-              )}
-              <AvatarFallback className="text-xs">
-                {bounty.createdByUser.name?.[0]?.toUpperCase() ?? (
-                  <User className="w-3 h-3" />
-                )}
-              </AvatarFallback>
-            </Avatar>
-            <span className="text-sm font-medium">
-              {bounty.createdByUser.name}
-            </span>
-          </div>
-        </section>
-      )}
-
-      {/* Payment */}
-      {bounty.isPaid && bounty.paidAt && (
-        <>
-          <Separator />
-          <section className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Payment
-            </p>
-            <div className="flex flex-wrap gap-6 text-sm">
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">Paid at</p>
-                <p className="font-medium">
-                  {new Date(bounty.paidAt).toLocaleDateString("en-US", {
-                    month: "long",
+            {/* Meta */}
+            <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <Coins className="w-4 h-4 text-amber-500" />
+                <span className="font-semibold text-foreground">
+                  {bounty.bountyAmount} ZEC
+                </span>
+              </span>
+              {deadlineDate && (
+                <span className="flex items-center gap-1.5">
+                  <Clock className="w-4 h-4" />
+                  Deadline:{" "}
+                  {deadlineDate.toLocaleDateString("en-US", {
+                    month: "short",
                     day: "numeric",
                     year: "numeric",
                   })}
-                </p>
-              </div>
-              {primaryAssignee?.z_address && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">
-                    Shielded address
-                  </p>
-                  <p className="font-mono text-xs break-all">
-                    {primaryAssignee.z_address}
-                  </p>
-                </div>
+                </span>
+              )}
+              {createdDate && (
+                <span className="flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4" />
+                  Created:{" "}
+                  {createdDate.toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </span>
+              )}
+              {bounty.category?.name && (
+                <span className="flex items-center gap-1.5">
+                  <Tag className="w-4 h-4" />
+                  {bounty.category.name}
+                </span>
               )}
             </div>
-          </section>
-        </>
-      )}
-    </div>
+          </div>
+
+          <Separator />
+
+          {/* Description */}
+          {bounty.description && (
+            <section className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Description
+              </p>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                {bounty.description}
+              </p>
+            </section>
+          )}
+
+          {/* Assignees */}
+          {bounty.assignees && bounty.assignees.length > 0 && (
+            <section className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {bounty.assignees.length === 1 ? "Assignee" : "Assignees"}
+              </p>
+              <div className="flex flex-wrap gap-3">
+                {bounty.assignees.map((a) => {
+                  const user = a.user;
+                  return (
+                    <div
+                      key={a.userId ?? user?.id}
+                      className="flex items-center gap-2 border rounded-lg px-3 py-2 bg-muted/40"
+                    >
+                      <Avatar className="w-6 h-6">
+                        {user?.avatar && (
+                          <AvatarImage
+                            src={user.avatar}
+                            alt={user.name ?? ""}
+                          />
+                        )}
+                        <AvatarFallback className="text-xs">
+                          {user?.name?.[0]?.toUpperCase() ?? (
+                            <User className="w-3 h-3" />
+                          )}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="text-sm">
+                        <p className="font-medium leading-none">
+                          {user?.name ?? "—"}
+                        </p>
+                        {user?.email && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {user.email}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* Creator */}
+          {bounty.createdByUser && (
+            <section className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Posted by
+              </p>
+              <div className="flex items-center gap-2">
+                <Avatar className="w-6 h-6">
+                  {bounty.createdByUser.avatar && (
+                    <AvatarImage
+                      src={bounty.createdByUser.avatar}
+                      alt={bounty.createdByUser.name ?? ""}
+                    />
+                  )}
+                  <AvatarFallback className="text-xs">
+                    {bounty.createdByUser.name?.[0]?.toUpperCase() ?? (
+                      <User className="w-3 h-3" />
+                    )}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-sm font-medium">
+                  {bounty.createdByUser.name}
+                </span>
+              </div>
+            </section>
+          )}
+
+          {/* Payment */}
+          {bounty.isPaid && bounty.paidAt && (
+            <>
+              <Separator />
+              <section className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Payment
+                </p>
+                <div className="flex flex-wrap gap-6 text-sm">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-0.5">
+                      Paid at
+                    </p>
+                    <p className="font-medium">
+                      {new Date(bounty.paidAt).toLocaleDateString("en-US", {
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </p>
+                  </div>
+                  {primaryAssignee?.z_address && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-0.5">
+                        Shielded address
+                      </p>
+                      <p className="font-mono text-xs break-all">
+                        {primaryAssignee.z_address}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </section>
+            </>
+          )}
+        </div>
+      </main>
+    </ProtectedRoute>
   );
 }
 

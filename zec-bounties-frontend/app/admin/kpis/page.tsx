@@ -12,7 +12,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowUpDown, Zap } from "lucide-react";
+import {
+  ArrowUpDown,
+  Zap,
+  Users,
+  Shield,
+  Pencil,
+  Server,
+  Pickaxe,
+  BookOpen,
+} from "lucide-react";
 import {
   ResponsiveContainer,
   BarChart,
@@ -24,6 +33,8 @@ import {
   AreaChart,
   Area,
   Legend,
+  LineChart,
+  Line,
 } from "recharts";
 import {
   Select,
@@ -35,13 +46,23 @@ import {
 import { Label } from "@/components/ui/label";
 import { getAddressReceivers, initAddressDecoder } from "@/lib/decodeAddress";
 import { ProtectedRoute } from "@/components/auth/protected-route";
-import { AdminNavbar } from "@/components/layout/admin/navbar";
-import { backendUrl } from "@/lib/configENV";
+import {
+  TopContributor,
+  ContributorsOverTime,
+  BountyTypesOverTime,
+} from "@/lib/types";
 import { confirmedTotal, fmt } from "@/lib/utils";
+import { backendUrl } from "@/lib/configENV";
+import { AdminNavbar } from "@/components/layout/admin/navbar";
 import { cn } from "@/lib/utils";
 
 type SortKey = "completed" | "submitted" | "completionRate" | "totalEarned";
-type ChartType = "contributors" | "earned" | "bountyTypes" | "addressTypes";
+type ChartType =
+  | "contributors"
+  | "earned"
+  | "bountyTypes"
+  | "addressTypes"
+  | "avgEarnings";
 
 const CHART_PALETTE = [
   "var(--chart-1)",
@@ -51,6 +72,35 @@ const CHART_PALETTE = [
   "var(--chart-5)",
   "var(--primary)",
 ];
+
+// Reusable KPI Card with colored top border
+function KpiCard({
+  children,
+  timeRange,
+  className,
+}: {
+  children: React.ReactNode;
+  timeRange: "30d" | "90d" | "all";
+  className?: string;
+}) {
+  const borderColors = {
+    "30d": "border-t-blue-500",
+    "90d": "border-t-teal-500",
+    all: "border-t-muted-foreground",
+  };
+  return (
+    <Card
+      className={cn(
+        "bg-card",
+        borderColors[timeRange],
+        "border-t-4",
+        className,
+      )}
+    >
+      {children}
+    </Card>
+  );
+}
 
 export default function KpisDashboard() {
   const {
@@ -69,28 +119,223 @@ export default function KpisDashboard() {
   const [viewMode, setViewMode] = useState<"public" | "admin">(
     isAdmin ? "admin" : "public",
   );
-
   const [sortKey, setSortKey] = useState<SortKey>("completed");
   const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
   const [showAllUsers, setShowAllUsers] = useState(false);
-
   const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
   const [isRescanning, setIsRescanning] = useState(false);
   const [rescanMessage, setRescanMessage] = useState("");
   const [rescanError, setRescanError] = useState("");
-
-  const [topContributors, setTopContributors] = useState<any[]>([]);
+  const [topContributors, setTopContributors] = useState<TopContributor[]>([]);
   const [loadingContributors, setLoadingContributors] = useState(true);
   const [selectedChart, setSelectedChart] = useState<ChartType>("contributors");
-
   const [contributorsOverTimeData, setContributorsOverTimeData] = useState<
-    any[]
+    ContributorsOverTime[]
   >([]);
-  const [bountyTypesOverTime, setBountyTypesOverTime] = useState<any[]>([]);
+  const [bountyTypesOverTime, setBountyTypesOverTime] = useState<
+    BountyTypesOverTime[]
+  >([]);
+  const [averageEarningsOverTime, setAverageEarningsOverTime] = useState<any[]>(
+    [],
+  );
+
+  const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
+  const [selectedUserForBadges, setSelectedUserForBadges] = useState<any>(null);
+  const [selectedBadges, setSelectedBadges] = useState<string[]>([]);
+  const [isSavingBadges, setIsSavingBadges] = useState(false);
+
+  const availableBadges = [
+    { key: "dao-member", label: "DAO Member" },
+    { key: "node-runner", label: "Node Runner" },
+    { key: "miner", label: "Miner" },
+    { key: "researcher", label: "Researcher" },
+  ];
+
+  // Final simplified badge logic
+  // Updated: Supports showing multiple badges at once
+  const getBadgeIcons = (badges?: string[], role?: string) => {
+    const icons = [];
+
+    // Check for avatar color override first
+    const avatarOverride = badges?.find((b) => b.startsWith("avatar:"));
+
+    if (avatarOverride) {
+      let avatarClass = "text-muted-foreground";
+
+      switch (avatarOverride) {
+        case "avatar:red":
+          avatarClass = "text-red-500";
+          break;
+        case "avatar:blue":
+          avatarClass = "text-blue-500";
+          break;
+        case "avatar:purple":
+          avatarClass = "text-purple-500";
+          break;
+        case "avatar:gold":
+          avatarClass = "text-yellow-500";
+          break;
+        case "avatar:pink":
+          avatarClass = "text-pink-500";
+          break;
+        default:
+          avatarClass = "text-muted-foreground";
+      }
+
+      icons.push(
+        <div key="avatar-override" title="Custom Avatar Color">
+          <Users className={`w-4 h-4 ${avatarClass}`} />
+        </div>,
+      );
+    }
+
+    // Regular badges
+    if (role === "ADMIN" || badges?.includes("admin")) {
+      icons.push(
+        <div
+          key="admin"
+          title="Admin"
+          className="text-purple-500 dark:text-purple-400"
+        >
+          <Shield className="w-4 h-4" />
+        </div>,
+      );
+    }
+
+    if (badges?.includes("dao-member")) {
+      icons.push(
+        <div
+          key="dao-member"
+          title="DAO Member"
+          className="text-teal-500 dark:text-teal-400"
+        >
+          <img src="/ZecHubBlue.png" alt="ZecHub" className="w-4 h-4" />
+        </div>,
+      );
+    }
+
+    if (badges?.includes("node-runner")) {
+      icons.push(
+        <div
+          key="node-runner"
+          title="Node Runner"
+          className="text-blue-500 dark:text-blue-400"
+        >
+          <Server className="w-4 h-4" />
+        </div>,
+      );
+    }
+
+    if (badges?.includes("miner")) {
+      icons.push(
+        <div
+          key="miner"
+          title="Miner"
+          className="text-orange-500 dark:text-orange-400"
+        >
+          <Pickaxe className="w-4 h-4" />
+        </div>,
+      );
+    }
+
+    if (badges?.includes("researcher")) {
+      icons.push(
+        <div
+          key="researcher"
+          title="Researcher"
+          className="text-emerald-500 dark:text-emerald-400"
+        >
+          <BookOpen className="w-4 h-4" />
+        </div>,
+      );
+    }
+
+    // Default regular user icon (only if no override and no other badges)
+    if (icons.length === 0) {
+      icons.push(
+        <div
+          key="regular"
+          title="Regular User"
+          className="text-muted-foreground"
+        >
+          <Users className="w-4 h-4" />
+        </div>,
+      );
+    }
+
+    return icons;
+  };
+
+  // Dynamic default avatar color based on completed bounties
+  const getDefaultAvatarClasses = (
+    completed: number,
+    badges: string[] = [],
+  ) => {
+    // Check for manual avatar override first
+    const avatarOverride = badges.find((b) => b.startsWith("avatar:"));
+
+    if (avatarOverride) {
+      switch (avatarOverride) {
+        case "avatar:red":
+          return "bg-red-500 text-white";
+        case "avatar:blue":
+          return "bg-blue-500 text-white";
+        case "avatar:purple":
+          return "bg-purple-500 text-white";
+        case "avatar:gold":
+          return "bg-yellow-500 text-black";
+        case "avatar:pink":
+          return "bg-pink-500 text-white"; // ← This was missing
+        case "avatar:default":
+        default:
+          break;
+      }
+    }
+
+    // Automatic based on completed bounties
+    if (completed >= 60) {
+      return "bg-pink-500 text-white"; // Pink
+    }
+    if (completed >= 20) {
+      return "bg-yellow-500 text-black"; // Gold
+    }
+    if (completed >= 10) {
+      return "bg-purple-500 text-white"; // Purple
+    }
+    if (completed >= 5) {
+      return "bg-blue-500 text-white"; // Blue
+    }
+    if (completed >= 1) {
+      return "bg-red-500 text-white"; // Red
+    }
+    return "bg-muted text-muted-foreground"; // Default
+  };
+
+  // === Time Range Filter ===
+  const [timeRange, setTimeRange] = useState<"30d" | "90d" | "all">("all");
+
+  const timeRangeConfig = {
+    "30d": {
+      label: "Last 30 Days",
+      color: "text-blue-500 dark:text-blue-400",
+      border: "border-blue-500",
+    },
+    "90d": {
+      label: "Last 90 Days",
+      color: "text-teal-500 dark:text-teal-400",
+      border: "border-teal-500",
+    },
+    all: {
+      label: "All Time",
+      color: "text-muted-foreground",
+      border: "border-border",
+    },
+  };
+
+  const currentTimeConfig = timeRangeConfig[timeRange];
 
   // === Wallet Selector ===
   const [selectedWalletId, setSelectedWalletId] = useState<string>("");
-
   const availableWallets = useMemo(() => {
     if (!zcashParams) return [];
     return zcashParams.map((p: any) => {
@@ -127,7 +372,6 @@ export default function KpisDashboard() {
   const handleWalletChange = async (walletId: string) => {
     const wallet = availableWallets.find((w: any) => w.id === walletId);
     if (!wallet) return;
-
     setSelectedWalletId(walletId);
     try {
       await setDefaultWallet(wallet.accountName, wallet.teamId);
@@ -150,9 +394,12 @@ export default function KpisDashboard() {
         setLoadingContributors(true);
         if (isAdmin) await initAddressDecoder();
 
-        const params = showAllUsers ? "?all=true" : "";
+        const params = new URLSearchParams();
+        if (showAllUsers) params.set("all", "true");
+        params.set("timeRange", timeRange);
+
         const res = await fetch(
-          `${backendUrl}/api/kpis/top-contributors${params}`,
+          `${backendUrl}/api/kpis/top-contributors?${params.toString()}`,
           {
             headers: {
               Authorization: `Bearer ${localStorage.getItem("authToken")}`,
@@ -185,7 +432,7 @@ export default function KpisDashboard() {
       }
     };
     loadData();
-  }, [isAdmin, showAllUsers]);
+  }, [isAdmin, showAllUsers, timeRange]);
 
   // Fetch time series data
   useEffect(() => {
@@ -205,9 +452,34 @@ export default function KpisDashboard() {
     fetchData();
   }, []);
 
+  // Fetch Average + Median Earnings Over Time
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const params = new URLSearchParams();
+        params.set("timeRange", timeRange);
+
+        const res = await fetch(
+          `${backendUrl}/api/kpis/average-earnings-over-time?${params.toString()}`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+            },
+          },
+        );
+        if (res.ok) {
+          setAverageEarningsOverTime(await res.json());
+        }
+      } catch (error) {
+        console.error("Failed to fetch average earnings over time:", error);
+        setAverageEarningsOverTime([]);
+      }
+    };
+    fetchData();
+  }, [timeRange]);
+
   useEffect(() => {
     if (viewMode !== "admin") return;
-
     const fetchBountyTypes = async () => {
       try {
         const res = await fetch(
@@ -224,11 +496,10 @@ export default function KpisDashboard() {
     fetchBountyTypes();
   }, [viewMode]);
 
-  // Derived values
+  // === Derived Values ===
   const sortedContributors = useMemo(() => {
     return [...topContributors].sort((a, b) => {
       let valA: number, valB: number;
-
       if (sortKey === "completed") {
         valA = a.completed;
         valB = b.completed;
@@ -242,7 +513,6 @@ export default function KpisDashboard() {
         valA = a.submitted > 0 ? (a.completed / a.submitted) * 100 : 0;
         valB = b.submitted > 0 ? (b.completed / b.submitted) * 100 : 0;
       }
-
       return sortDirection === "desc" ? valB - valA : valA - valB;
     });
   }, [topContributors, sortKey, sortDirection]);
@@ -251,19 +521,22 @@ export default function KpisDashboard() {
     () => topContributors.reduce((sum, u) => sum + (u.submitted || 0), 0),
     [topContributors],
   );
-
   const completedBounties = useMemo(
     () => topContributors.reduce((sum, u) => sum + (u.completed || 0), 0),
     [topContributors],
   );
-
   const activeBounties = totalBounties - completedBounties;
   const uniqueContributors = topContributors.length;
-
   const totalZecPaid = useMemo(
     () => sortedContributors.reduce((sum, u) => sum + (u.totalEarned || 0), 0),
     [sortedContributors],
   );
+
+  // === NEW: Avg ZEC per Earner ===
+  const avgZecPerEarner = useMemo(() => {
+    const earners = topContributors.filter((u) => u.totalEarned > 0);
+    return earners.length > 0 ? totalZecPaid / earners.length : 0;
+  }, [topContributors, totalZecPaid]);
 
   const earnedOverTime = useMemo(() => {
     if (!topContributors.length) return [];
@@ -297,7 +570,6 @@ export default function KpisDashboard() {
     setIsRefreshingBalance(true);
     setRescanMessage("");
     setRescanError("");
-
     try {
       await fetchBalance();
       await new Promise((r) => setTimeout(r, 400));
@@ -315,7 +587,6 @@ export default function KpisDashboard() {
     setIsRescanning(true);
     setRescanMessage("");
     setRescanError("");
-
     try {
       await rescanWallet();
       setRescanMessage("Rescan triggered");
@@ -328,18 +599,86 @@ export default function KpisDashboard() {
     }
   };
 
-  // Address Type Helpers (fixed semantic colors — not theme-dependent)
-  const getAddressTypeBadge = (type: string) => {
-    const normalized = type.toLowerCase();
+  const openBadgeModal = (user: any) => {
+    setSelectedUserForBadges(user);
+    setSelectedBadges(user.badges || []);
+    setIsBadgeModalOpen(true);
+  };
+
+  const closeBadgeModal = () => {
+    setIsBadgeModalOpen(false);
+    setSelectedUserForBadges(null);
+    setSelectedBadges([]);
+  };
+
+  const toggleBadge = (badgeKey: string) => {
+    setSelectedBadges((prev) =>
+      prev.includes(badgeKey)
+        ? prev.filter((b) => b !== badgeKey)
+        : [...prev, badgeKey],
+    );
+  };
+
+  const saveUserBadges = async () => {
+    if (!selectedUserForBadges) return;
+
+    setIsSavingBadges(true);
+    try {
+      const res = await fetch(
+        `${backendUrl}/api/kpis/users/${selectedUserForBadges.id}/badges`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          },
+          body: JSON.stringify({ badges: selectedBadges }),
+        },
+      );
+
+      if (!res.ok) throw new Error("Failed to update badges");
+
+      // Better than window.location.reload()
+      // Re-fetch the contributors list
+      const params = new URLSearchParams();
+      if (showAllUsers) params.set("all", "true");
+      params.set("timeRange", timeRange);
+
+      const refreshRes = await fetch(
+        `${backendUrl}/api/kpis/top-contributors?${params.toString()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          },
+        },
+      );
+
+      if (refreshRes.ok) {
+        let newData = await refreshRes.json();
+        setTopContributors(newData);
+      }
+
+      closeBadgeModal();
+    } catch (error) {
+      console.error(error);
+      alert("Failed to save badges");
+    } finally {
+      setIsSavingBadges(false);
+    }
+  };
+
+  // Address Type Helpers
+  const getAddressTypeBadge = (type?: string) => {
+    const normalized = type?.toLowerCase();
     if (normalized === "none")
       return "bg-red-500/20 text-red-500 dark:text-red-400 border border-red-500/30";
-    if (normalized.includes("orchard") && normalized.includes("sapling"))
+    if (normalized?.includes("orchard") && normalized?.includes("sapling"))
       return "bg-gradient-to-r from-emerald-500 to-blue-500 text-white";
-    if (normalized.includes("orchard"))
+    if (normalized?.includes("orchard"))
       return "bg-gradient-to-r from-emerald-500 to-green-600 text-white";
-    if (normalized.includes("sapling"))
+    if (normalized?.includes("sapling"))
       return "bg-gradient-to-r from-blue-500 to-indigo-500 text-white";
-    if (normalized.includes("transparent"))
+    if (normalized?.includes("transparent"))
       return "bg-gradient-to-r from-slate-500 to-slate-600 text-white";
     if (normalized === "ua + z" || normalized === "full")
       return "bg-gradient-to-r from-emerald-500 to-blue-500 text-white";
@@ -348,14 +687,14 @@ export default function KpisDashboard() {
     return "bg-muted text-muted-foreground";
   };
 
-  const getDisplayAddressType = (type: string) => {
-    const normalized = type.toLowerCase();
+  const getDisplayAddressType = (type?: string) => {
+    const normalized = type?.toLowerCase();
     if (normalized === "none") return "No UA";
-    if (normalized.includes("orchard") && normalized.includes("sapling"))
+    if (normalized?.includes("orchard") && normalized?.includes("sapling"))
       return "Orchard + Sapling";
-    if (normalized.includes("orchard")) return "Orchard";
-    if (normalized.includes("sapling")) return "Sapling";
-    if (normalized.includes("transparent")) return "Transparent";
+    if (normalized?.includes("orchard")) return "Orchard";
+    if (normalized?.includes("sapling")) return "Sapling";
+    if (normalized?.includes("transparent")) return "Transparent";
     if (normalized === "ua + z" || normalized === "full")
       return "Orchard + Sapling";
     if (normalized === "ua only") return "Orchard";
@@ -365,7 +704,7 @@ export default function KpisDashboard() {
   return (
     <ProtectedRoute>
       <main className="min-h-screen bg-background">
-        <AdminNavbar />
+        <AdminNavbar isAdmin={true} />
         <div className="max-w-7xl mx-auto px-6 py-8 bg-background min-h-screen text-foreground">
           {/* Header */}
           <div className="flex justify-between items-center mb-8">
@@ -378,28 +717,53 @@ export default function KpisDashboard() {
               </p>
             </div>
 
-            {isAdmin && (
-              <div className="flex items-center gap-1 bg-muted p-1 rounded-lg">
-                <Button
-                  variant={viewMode === "public" ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setViewMode("public")}
+            <div className="flex items-center gap-3">
+              {/* View Mode Toggle */}
+              {isAdmin && (
+                <div className="flex items-center gap-1 bg-muted p-1 rounded-lg">
+                  <Button
+                    variant={viewMode === "public" ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setViewMode("public")}
+                  >
+                    Public
+                  </Button>
+                  <Button
+                    variant={viewMode === "admin" ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setViewMode("admin")}
+                  >
+                    Admin
+                  </Button>
+                </div>
+              )}
+
+              {/* Time Range Dropdown */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  Time Range
+                </span>
+                <Select
+                  value={timeRange}
+                  onValueChange={(value) => setTimeRange(value as any)}
                 >
-                  Public
-                </Button>
-                <Button
-                  variant={viewMode === "admin" ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setViewMode("admin")}
-                >
-                  Admin
-                </Button>
+                  <SelectTrigger
+                    className={cn("w-[160px]", currentTimeConfig.border)}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="30d">Last 30 Days</SelectItem>
+                    <SelectItem value="90d">Last 90 Days</SelectItem>
+                    <SelectItem value="all">All Time</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            )}
+            </div>
           </div>
 
           {/* Top Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
             {[
               { label: "Total Bounties", value: totalBounties },
               {
@@ -418,8 +782,13 @@ export default function KpisDashboard() {
                 color: "text-primary",
               },
               { label: "Unique Contributors", value: uniqueContributors },
+              {
+                label: "Avg ZEC per Earner",
+                value: avgZecPerEarner.toFixed(4),
+                color: "text-purple-500 dark:text-purple-400",
+              },
             ].map((stat, i) => (
-              <Card key={i} className="bg-card border-border">
+              <KpiCard key={i} timeRange={timeRange}>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm text-muted-foreground">
                     {stat.label}
@@ -432,7 +801,7 @@ export default function KpisDashboard() {
                     {stat.value}
                   </div>
                 </CardContent>
-              </Card>
+              </KpiCard>
             ))}
           </div>
 
@@ -458,7 +827,6 @@ export default function KpisDashboard() {
                 </div>
               </div>
             </CardHeader>
-
             <CardContent>
               {loadingContributors ? (
                 <div className="py-8 text-center text-muted-foreground">
@@ -483,6 +851,25 @@ export default function KpisDashboard() {
                       >
                         Submitted <ArrowUpDown className="inline w-4 h-4" />
                       </TableHead>
+                      {/* Admin-only columns */}
+                      {viewMode === "admin" && (
+                        <TableHead>
+                          <div className="flex items-center gap-2">
+                            <span>Badges</span>
+                            <button
+                              onClick={() => {
+                                setSelectedUserForBadges(null);
+                                setSelectedBadges([]);
+                                setIsBadgeModalOpen(true);
+                              }}
+                              className="p-1 hover:bg-muted rounded transition-colors"
+                              title="Manage User Badges"
+                            >
+                              <Pencil className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                            </button>
+                          </div>
+                        </TableHead>
+                      )}
                       {viewMode === "admin" && (
                         <TableHead>Address Type</TableHead>
                       )}
@@ -506,12 +893,11 @@ export default function KpisDashboard() {
                       )}
                     </TableRow>
                   </TableHeader>
-
                   <TableBody>
                     {sortedContributors.length === 0 ? (
                       <TableRow>
                         <TableCell
-                          colSpan={viewMode === "admin" ? 8 : 5}
+                          colSpan={viewMode === "admin" ? 9 : 5}
                           className="text-center py-8 text-muted-foreground"
                         >
                           No data available.
@@ -531,14 +917,52 @@ export default function KpisDashboard() {
                             className="border-b border-border hover:bg-muted/50"
                           >
                             <TableCell>#{index + 1}</TableCell>
+
+                            {/* Avatar with hover tooltip */}
                             <TableCell>
                               {user.avatar ? (
                                 <img
                                   src={user.avatar}
-                                  className="w-8 h-8 rounded-full border border-border"
+                                  className="w-8 h-8 rounded-full border border-border cursor-help"
+                                  title={
+                                    user.badges && user.badges.length > 0
+                                      ? user.badges
+                                          .map((b) => {
+                                            if (b === "dao-member")
+                                              return "DAO Member";
+                                            if (b === "node-runner")
+                                              return "Node Runner";
+                                            if (b === "miner") return "Miner";
+                                            if (b === "researcher")
+                                              return "Researcher";
+                                            if (b === "admin") return "Admin";
+                                            return b;
+                                          })
+                                          .join(" • ")
+                                      : "Regular User"
+                                  }
                                 />
                               ) : (
-                                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs text-muted-foreground">
+                                <div
+                                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs cursor-help ${getDefaultAvatarClasses(user.completed, user.badges)}`}
+                                  title={
+                                    user.badges && user.badges.length > 0
+                                      ? user.badges
+                                          .map((b) => {
+                                            if (b === "dao-member")
+                                              return "DAO Member";
+                                            if (b === "node-runner")
+                                              return "Node Runner";
+                                            if (b === "miner") return "Miner";
+                                            if (b === "researcher")
+                                              return "Researcher";
+                                            if (b === "admin") return "Admin";
+                                            return b;
+                                          })
+                                          .join(" • ")
+                                      : "Regular User"
+                                  }
+                                >
                                   {user.name?.[0]}
                                 </div>
                               )}
@@ -548,6 +972,15 @@ export default function KpisDashboard() {
                             <TableCell className="text-muted-foreground">
                               {user.submitted}
                             </TableCell>
+
+                            {/* Admin-only columns */}
+                            {viewMode === "admin" && (
+                              <TableCell>
+                                <div className="flex items-center gap-1.5">
+                                  {getBadgeIcons(user?.badges, user.role)}
+                                </div>
+                              </TableCell>
+                            )}
 
                             {viewMode === "admin" && (
                               <TableCell>
@@ -601,10 +1034,12 @@ export default function KpisDashboard() {
                     <option value="addressTypes">
                       Address Type Distribution
                     </option>
+                    <option value="avgEarnings">
+                      Avg Earnings per Contributor (Monthly)
+                    </option>
                   </select>
                 </div>
               </CardHeader>
-
               <CardContent className="h-[340px]">
                 {selectedChart === "contributors" && (
                   <ResponsiveContainer width="100%" height="100%">
@@ -636,7 +1071,6 @@ export default function KpisDashboard() {
                     </AreaChart>
                   </ResponsiveContainer>
                 )}
-
                 {selectedChart === "earned" && (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={earnedOverTime}>
@@ -666,7 +1100,6 @@ export default function KpisDashboard() {
                     </BarChart>
                   </ResponsiveContainer>
                 )}
-
                 {selectedChart === "bountyTypes" && (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={bountyTypesOverTime}>
@@ -700,7 +1133,6 @@ export default function KpisDashboard() {
                     </BarChart>
                   </ResponsiveContainer>
                 )}
-
                 {selectedChart === "addressTypes" && (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={addressTypeDistribution}>
@@ -730,9 +1162,64 @@ export default function KpisDashboard() {
                     </BarChart>
                   </ResponsiveContainer>
                 )}
+
+                {/* NEW: Average + Median Earnings Over Time */}
+                {selectedChart === "avgEarnings" && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={averageEarningsOverTime}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="var(--border)"
+                      />
+                      <XAxis
+                        dataKey="month"
+                        stroke="var(--muted-foreground)"
+                        tickFormatter={(value) => {
+                          const [year, month] = value.split("-");
+                          const date = new Date(
+                            parseInt(year),
+                            parseInt(month) - 1,
+                          );
+                          return date.toLocaleString("default", {
+                            month: "short",
+                            year: "2-digit",
+                          });
+                        }}
+                      />
+                      <YAxis stroke="var(--muted-foreground)" />
+                      <Tooltip
+                        cursor={{ fill: "var(--muted)", opacity: 0.4 }}
+                        contentStyle={{
+                          backgroundColor: "var(--popover)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "6px",
+                          color: "var(--popover-foreground)",
+                        }}
+                      />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="average"
+                        name="Average ZEC"
+                        stroke="var(--chart-5)"
+                        strokeWidth={2.5}
+                        dot={{ r: 3 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="median"
+                        name="Median ZEC"
+                        stroke="var(--chart-2)"
+                        strokeWidth={2.5}
+                        dot={{ r: 3 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
               </CardContent>
             </Card>
           )}
+
           {/* Admin Wallet Widget */}
           {viewMode === "admin" && (
             <Card className="bg-card border-border">
@@ -812,17 +1299,12 @@ export default function KpisDashboard() {
                   </Select>
                 </div>
 
-                {/* Balance */}
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    Current Balance
-                  </p>
-                  <p className="text-4xl font-bold tracking-tighter">
-                    {balance
-                      ? `${fmt(confirmedTotal(balance))} ZEC`
-                      : `0.0000 ZEC`}
-                  </p>
-                </div>
+                {/* Balance Display - Improved */}
+                <p className="text-4xl font-bold tracking-tighter">
+                  {balance
+                    ? `${fmt(confirmedTotal(balance))} ZEC`
+                    : `0.0000 ZEC`}
+                </p>
 
                 {/* Actions */}
                 <div className="flex gap-2">
@@ -858,6 +1340,244 @@ export default function KpisDashboard() {
                 )}
               </CardContent>
             </Card>
+          )}
+
+          {/* === Badge Management Modal === */}
+          {isBadgeModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+              <div className="w-full max-w-md rounded-xl bg-popover text-popover-foreground p-6 shadow-xl border border-border">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-xl font-semibold">Manage User Badges</h2>
+                  <button
+                    onClick={closeBadgeModal}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* User Selector - only show if no user is pre-selected */}
+                {!selectedUserForBadges && (
+                  <div className="mb-4">
+                    <label className="text-sm text-muted-foreground mb-1 block">
+                      Select User
+                    </label>
+                    <Select
+                      value=""
+                      onValueChange={(userId) => {
+                        const user = topContributors.find(
+                          (u) => u.id === userId,
+                        );
+                        if (user) {
+                          setSelectedUserForBadges(user);
+                          setSelectedBadges(user.badges || []);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Choose a user..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {topContributors.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>
+                            {user.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Show user name if already selected */}
+                {selectedUserForBadges && (
+                  <div className="mb-4">
+                    <p className="text-sm text-muted-foreground mb-1">User</p>
+                    <div className="font-medium">
+                      {selectedUserForBadges.name}
+                    </div>
+                  </div>
+                )}
+
+                {/* Badges Multi-Select */}
+                {selectedUserForBadges && (
+                  <div className="mb-6">
+                    <p className="text-sm text-muted-foreground mb-2">Badges</p>
+                    <div className="space-y-2">
+                      {availableBadges.map((badge) => {
+                        // Get the proper icon for each badge type
+                        const getBadgeIcon = (key: string) => {
+                          if (key === "dao-member") {
+                            return (
+                              <img
+                                src="/ZecHubBlue.png"
+                                alt="ZecHub"
+                                className="w-4 h-4"
+                              />
+                            );
+                          }
+                          if (key === "node-runner") {
+                            return (
+                              <Server className="w-4 h-4 text-blue-500 dark:text-blue-400" />
+                            );
+                          }
+                          if (key === "miner") {
+                            return (
+                              <Pickaxe className="w-4 h-4 text-orange-500 dark:text-orange-400" />
+                            );
+                          }
+                          if (key === "researcher") {
+                            return (
+                              <BookOpen className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
+                            );
+                          }
+                          return null;
+                        };
+
+                        return (
+                          <label
+                            key={badge.key}
+                            className="flex items-center gap-3 rounded-lg border border-border px-3 py-2 hover:bg-muted cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedBadges.includes(badge.key)}
+                              onChange={() => toggleBadge(badge.key)}
+                              className="h-4 w-4 accent-primary"
+                            />
+                            <div className="flex items-center gap-2">
+                              {getBadgeIcon(badge.key)}
+                              <span>{badge.label}</span>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Avatar Color Override */}
+                {selectedUserForBadges && (
+                  <div className="mb-6 border-t border-border pt-4">
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Avatar Color Override
+                    </p>
+                    <div className="space-y-1">
+                      {[
+                        {
+                          value: "avatar:default",
+                          label: "Default (based on completed bounties)",
+                          minCompleted: 0,
+                          colorClass: "bg-muted text-muted-foreground",
+                        },
+                        {
+                          value: "avatar:red",
+                          label: "Red",
+                          minCompleted: 1,
+                          colorClass: "bg-red-500 text-white",
+                        },
+                        {
+                          value: "avatar:blue",
+                          label: "Blue",
+                          minCompleted: 5,
+                          colorClass: "bg-blue-500 text-white",
+                        },
+                        {
+                          value: "avatar:purple",
+                          label: "Purple",
+                          minCompleted: 10,
+                          colorClass: "bg-purple-500 text-white",
+                        },
+                        {
+                          value: "avatar:gold",
+                          label: "Gold",
+                          minCompleted: 20,
+                          colorClass: "bg-yellow-500 text-black",
+                        },
+                        {
+                          value: "avatar:pink",
+                          label: "Pink",
+                          minCompleted: 60,
+                          colorClass: "bg-pink-500 text-white",
+                        },
+                      ].map((option) => {
+                        const isSelected =
+                          selectedBadges.includes(option.value) ||
+                          (option.value === "avatar:default" &&
+                            !selectedBadges.some((b) =>
+                              b.startsWith("avatar:"),
+                            ));
+
+                        return (
+                          <button
+                            key={option.value}
+                            onClick={() => {
+                              const filtered = selectedBadges.filter(
+                                (b) => !b.startsWith("avatar:"),
+                              );
+                              if (option.value !== "avatar:default") {
+                                setSelectedBadges([...filtered, option.value]);
+                              } else {
+                                setSelectedBadges(filtered);
+                              }
+                            }}
+                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                              isSelected
+                                ? "bg-muted border border-primary"
+                                : "hover:bg-muted/50 border border-transparent"
+                            }`}
+                          >
+                            {/* Colored Member Icon */}
+                            <div
+                              className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${option.colorClass}`}
+                            >
+                              <Users className="w-3.5 h-3.5" />
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium">
+                                {option.label}
+                              </div>
+                              {option.minCompleted > 0 && (
+                                <div className="text-xs text-muted-foreground">
+                                  Requires {option.minCompleted}+ completed
+                                  bounties
+                                </div>
+                              )}
+                            </div>
+
+                            {isSelected && (
+                              <div className="text-primary text-sm flex-shrink-0">
+                                ✓
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <p className="text-xs text-muted-foreground mt-2">
+                      This overrides the automatic avatar color.
+                    </p>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex justify-end gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={closeBadgeModal}
+                    disabled={isSavingBadges}
+                  >
+                    Cancel
+                  </Button>
+                  {selectedUserForBadges && (
+                    <Button onClick={saveUserBadges} disabled={isSavingBadges}>
+                      {isSavingBadges ? "Saving..." : "Save Changes"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </main>
