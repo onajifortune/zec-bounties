@@ -53,7 +53,7 @@ import {
 } from "@/lib/types";
 import { confirmedTotal, fmt } from "@/lib/utils";
 import { backendUrl } from "@/lib/configENV";
-import { Navbar } from "@/components/layout/navbar";
+import { AdminNavbar } from "@/components/layout/admin/navbar";
 import { cn } from "@/lib/utils";
 
 type SortKey = "completed" | "submitted" | "completionRate" | "totalEarned";
@@ -72,6 +72,51 @@ const CHART_PALETTE = [
   "var(--chart-5)",
   "var(--primary)",
 ];
+
+const BADGE_LABELS: Record<string, string> = {
+  "dao-member": "DAO Member",
+  "node-runner": "Node Runner",
+  miner: "Miner",
+  researcher: "Researcher",
+  admin: "Admin",
+};
+
+const getBadgeTooltip = (badges?: string[]) =>
+  badges && badges.length > 0
+    ? badges.map((b) => BADGE_LABELS[b] ?? b).join(" • ")
+    : "Regular User";
+
+function UserAvatar({
+  user,
+  getDefaultAvatarClasses,
+}: {
+  user: any;
+  getDefaultAvatarClasses: (completed: number, badges?: string[]) => string;
+}) {
+  const tooltip = getBadgeTooltip(user.badges);
+
+  if (user.avatar) {
+    return (
+      <img
+        src={user.avatar}
+        className="w-8 h-8 rounded-full border border-border cursor-help"
+        title={tooltip}
+      />
+    );
+  }
+
+  return (
+    <div
+      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs cursor-help ${getDefaultAvatarClasses(
+        user.completed,
+        user.badges,
+      )}`}
+      title={tooltip}
+    >
+      {user.name?.[0]}
+    </div>
+  );
+}
 
 // Reusable KPI Card with colored top border
 function KpiCard({
@@ -704,10 +749,10 @@ export default function KpisDashboard() {
   return (
     <ProtectedRoute>
       <main className="min-h-screen bg-background">
-        <Navbar isAdmin={true} />
-        <div className="max-w-7xl mx-auto px-6 py-8 bg-background min-h-screen text-foreground">
+        <AdminNavbar isAdmin={true} />
+        <div className="imd:container max-w-7xl mx-auto px-6 py-8 bg-background min-h-screen text-foreground">
           {/* Header */}
-          <div className="flex justify-between items-center mb-8">
+          <div className="grid grid-cols-1 imd:flex flex-col imd:flex-row justify-between items-center mb-8 gap-4">
             <div>
               <h1 className="text-4xl font-bold tracking-tight">
                 Platform Dashboard
@@ -717,10 +762,10 @@ export default function KpisDashboard() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="grid grid-cols-1 imd:flex items-center gap-3">
               {/* View Mode Toggle */}
               {isAdmin && (
-                <div className="flex items-center gap-1 bg-muted p-1 rounded-lg">
+                <div className="flex items-center gap-1 bg-muted p-0 rounded-lg w-fit">
                   <Button
                     variant={viewMode === "public" ? "default" : "ghost"}
                     size="sm"
@@ -920,52 +965,12 @@ export default function KpisDashboard() {
 
                             {/* Avatar with hover tooltip */}
                             <TableCell>
-                              {user.avatar ? (
-                                <img
-                                  src={user.avatar}
-                                  className="w-8 h-8 rounded-full border border-border cursor-help"
-                                  title={
-                                    user.badges && user.badges.length > 0
-                                      ? user.badges
-                                          .map((b) => {
-                                            if (b === "dao-member")
-                                              return "DAO Member";
-                                            if (b === "node-runner")
-                                              return "Node Runner";
-                                            if (b === "miner") return "Miner";
-                                            if (b === "researcher")
-                                              return "Researcher";
-                                            if (b === "admin") return "Admin";
-                                            return b;
-                                          })
-                                          .join(" • ")
-                                      : "Regular User"
-                                  }
-                                />
-                              ) : (
-                                <div
-                                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs cursor-help ${getDefaultAvatarClasses(user.completed, user.badges)}`}
-                                  title={
-                                    user.badges && user.badges.length > 0
-                                      ? user.badges
-                                          .map((b) => {
-                                            if (b === "dao-member")
-                                              return "DAO Member";
-                                            if (b === "node-runner")
-                                              return "Node Runner";
-                                            if (b === "miner") return "Miner";
-                                            if (b === "researcher")
-                                              return "Researcher";
-                                            if (b === "admin") return "Admin";
-                                            return b;
-                                          })
-                                          .join(" • ")
-                                      : "Regular User"
-                                  }
-                                >
-                                  {user.name?.[0]}
-                                </div>
-                              )}
+                              <UserAvatar
+                                user={user}
+                                getDefaultAvatarClasses={
+                                  getDefaultAvatarClasses
+                                }
+                              />
                             </TableCell>
                             <TableCell>{user.name}</TableCell>
                             <TableCell>{user.completed}</TableCell>
@@ -1019,14 +1024,14 @@ export default function KpisDashboard() {
           {viewMode === "admin" && (
             <Card className="bg-card border-border mb-8">
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col imd:flex-row imd:items-center justify-between gap-4">
                   <CardTitle>Analytics</CardTitle>
                   <select
                     value={selectedChart}
                     onChange={(e) =>
                       setSelectedChart(e.target.value as ChartType)
                     }
-                    className="bg-background border border-input text-foreground rounded px-3 py-1 text-sm"
+                    className="bg-background border border-input text-foreground rounded px-3 py-1 text-sm max-w-50 imd:max-w-none"
                   >
                     <option value="contributors">Contributors Over Time</option>
                     <option value="earned">Total ZEC Earned Over Time</option>
