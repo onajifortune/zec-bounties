@@ -20,6 +20,7 @@ export interface User {
   githubId?: string; // GitHub username/ID
   isRobin: Boolean;
   emailNotifications?: boolean;
+  badges?: string[];
 }
 
 export interface BountyCategory {
@@ -235,3 +236,20 @@ export interface ZaddrModuleAny {
   get_address_receivers?: (addr: string) => AddressReceivers;
   [key: string]: unknown;
 }
+
+export interface TopContributor extends User {
+  submitted: number;
+  completed: number;
+  totalEarned: number;
+  addressType?: string;
+}
+
+export interface ContributorsOverTime {
+  month: string;
+  cumulativeContributors: number;
+}
+
+export type BountyTypesOverTime = {
+  month: string;
+  [category: string]: string | number;
+};
