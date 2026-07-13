@@ -21,6 +21,10 @@ import {
   Server,
   Pickaxe,
   BookOpen,
+  AlertTriangle,
+  TreeDeciduous,
+  Leaf,
+  HelpCircle,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -745,6 +749,82 @@ export default function KpisDashboard() {
     }
   };
 
+  const getAddressTypeIcons = (type: string | undefined) => {
+    if (!type) {
+      return [
+        <div
+          key="none"
+          title="No Shielded Address"
+          className="flex items-center justify-center"
+        >
+          <AlertTriangle className="w-5 h-5 text-yellow-400" />
+        </div>,
+      ];
+    }
+
+    const normalized = type.toLowerCase().trim();
+
+    // Ironwood (any UA containing Orchard or Ironwood)
+    if (
+      normalized.includes("ironwood") ||
+      normalized.includes("orchard") ||
+      normalized === "ua only" ||
+      normalized === "ua + z" ||
+      normalized === "full"
+    ) {
+      return [
+        <div
+          key="ironwood"
+          title={getDisplayAddressType(type)}
+          className="flex items-center justify-center w-6 h-6 rounded-full bg-zinc-700 border-2 border-zinc-300"
+        >
+          <TreeDeciduous className="w-3.5 h-3.5 text-zinc-200" />
+        </div>,
+      ];
+    }
+
+    // Pure Sapling
+    if (normalized.includes("sapling")) {
+      return [
+        <div
+          key="sapling"
+          title="Sapling"
+          className="flex items-center justify-center"
+        >
+          <Leaf className="w-5 h-5 text-emerald-400" />
+        </div>,
+      ];
+    }
+
+    // Transparent or None
+    if (
+      normalized.includes("transparent") ||
+      normalized === "none" ||
+      normalized === ""
+    ) {
+      return [
+        <div
+          key="transparent"
+          title="none"
+          className="flex items-center justify-center"
+        >
+          -
+        </div>,
+      ];
+    }
+
+    // Fallback
+    return [
+      <div
+        key="unknown"
+        title={type}
+        className="flex items-center justify-center"
+      >
+        <HelpCircle className="w-5 h-5 text-slate-400" />
+      </div>,
+    ];
+  };
+
   // Address Type Helpers
   const getAddressTypeBadge = (type?: string) => {
     const normalized = type?.toLowerCase();
@@ -1067,13 +1147,21 @@ export default function KpisDashboard() {
 
                             {viewMode === "admin" && (
                               <TableCell>
+                                <div className="flex items-center justify-center gap-1.5">
+                                  {getAddressTypeIcons(user.addressType)}
+                                </div>
+                              </TableCell>
+                            )}
+
+                            {/* {viewMode === "admin" && (
+                              <TableCell>
                                 <span
                                   className={`px-2.5 py-0.5 text-xs rounded-full ${getAddressTypeBadge(user.addressType)}`}
                                 >
                                   {getDisplayAddressType(user.addressType)}
                                 </span>
                               </TableCell>
-                            )}
+                            )} */}
 
                             {viewMode === "admin" && (
                               <TableCell className="text-right font-medium">
