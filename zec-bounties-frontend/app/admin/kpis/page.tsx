@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useBounty } from "@/lib/bounty-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +43,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SlidersHorizontal, Check } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { getAddressReceivers, initAddressDecoder } from "@/lib/decodeAddress";
 import { ProtectedRoute } from "@/components/auth/protected-route";
@@ -57,6 +58,7 @@ import { AdminNavbar } from "@/components/layout/admin/navbar";
 import { cn } from "@/lib/utils";
 
 type SortKey = "completed" | "submitted" | "completionRate" | "totalEarned";
+type ChainFilter = "all" | "MAIN" | "TEST";
 type ChartType =
   | "contributors"
   | "earned"
@@ -188,6 +190,9 @@ export default function KpisDashboard() {
   const [selectedUserForBadges, setSelectedUserForBadges] = useState<any>(null);
   const [selectedBadges, setSelectedBadges] = useState<string[]>([]);
   const [isSavingBadges, setIsSavingBadges] = useState(false);
+  const [chainFilter, setChainFilter] = useState<ChainFilter>("all");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersRef = useRef<HTMLDivElement>(null);
 
   const availableBadges = [
     { key: "dao-member", label: "DAO Member" },
@@ -398,6 +403,26 @@ export default function KpisDashboard() {
   }, [availableWallets, selectedWalletId]);
 
   useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        filtersRef.current &&
+        !filtersRef.current.contains(e.target as Node)
+      ) {
+        setFiltersOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const chainLabel =
+    chainFilter === "all"
+      ? "Both chains"
+      : chainFilter === "MAIN"
+        ? "Mainnet"
+        : "Testnet";
+
+  useEffect(() => {
     if (availableWallets.length > 0 && !selectedWalletId) {
       const defaultWallet =
         availableWallets.find((w: any) => w.isDefault) || availableWallets[0];
@@ -442,6 +467,7 @@ export default function KpisDashboard() {
         const params = new URLSearchParams();
         if (showAllUsers) params.set("all", "true");
         params.set("timeRange", timeRange);
+        params.set("chain", chainFilter === "all" ? "ALL" : chainFilter);
 
         const res = await fetch(
           `${backendUrl}/api/kpis/top-contributors?${params.toString()}`,
@@ -477,14 +503,17 @@ export default function KpisDashboard() {
       }
     };
     loadData();
-  }, [isAdmin, showAllUsers, timeRange]);
+  }, [isAdmin, showAllUsers, timeRange, chainFilter]);
 
   // Fetch time series data
   useEffect(() => {
     const fetchData = async () => {
       try {
+        const params = new URLSearchParams();
+        if (chainFilter !== "all") params.set("chain", chainFilter);
+
         const res = await fetch(
-          `${backendUrl}/api/kpis/contributors-over-time`,
+          `${backendUrl}/api/kpis/contributors-over-time?${params.toString()}`,
           {
             headers: {
               Authorization: `Bearer ${localStorage.getItem("authToken")}`,
@@ -495,7 +524,7 @@ export default function KpisDashboard() {
       } catch {}
     };
     fetchData();
-  }, []);
+  }, [chainFilter]);
 
   // Fetch Average + Median Earnings Over Time
   useEffect(() => {
@@ -503,6 +532,7 @@ export default function KpisDashboard() {
       try {
         const params = new URLSearchParams();
         params.set("timeRange", timeRange);
+        if (chainFilter !== "all") params.set("chain", chainFilter);
 
         const res = await fetch(
           `${backendUrl}/api/kpis/average-earnings-over-time?${params.toString()}`,
@@ -521,14 +551,17 @@ export default function KpisDashboard() {
       }
     };
     fetchData();
-  }, [timeRange]);
+  }, [timeRange, chainFilter]);
 
   useEffect(() => {
     if (viewMode !== "admin") return;
     const fetchBountyTypes = async () => {
       try {
+        const params = new URLSearchParams();
+        if (chainFilter !== "all") params.set("chain", chainFilter);
+
         const res = await fetch(
-          `${backendUrl}/api/kpis/bounty-types-over-time`,
+          `${backendUrl}/api/kpis/bounty-types-over-time?${params.toString()}`,
           {
             headers: {
               Authorization: `Bearer ${localStorage.getItem("authToken")}`,
@@ -539,7 +572,7 @@ export default function KpisDashboard() {
       } catch {}
     };
     fetchBountyTypes();
-  }, [viewMode]);
+  }, [viewMode, chainFilter]);
 
   // === Derived Values ===
   const sortedContributors = useMemo(() => {
@@ -762,47 +795,92 @@ export default function KpisDashboard() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 imd:flex items-center gap-3">
-              {/* View Mode Toggle */}
+            <div className="grid grid-cols-1 imd:flex items-center gap-4">
+              {/* View Mode Toggle - subtle text switch */}
               {isAdmin && (
-                <div className="flex items-center gap-1 bg-muted p-0 rounded-lg w-fit">
-                  <Button
-                    variant={viewMode === "public" ? "default" : "ghost"}
-                    size="sm"
+                <div className="flex items-center gap-1 text-sm">
+                  <button
                     onClick={() => setViewMode("public")}
+                    className={cn(
+                      "px-2 py-1 rounded transition-colors",
+                      viewMode === "public"
+                        ? "text-foreground font-medium"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
                   >
                     Public
-                  </Button>
-                  <Button
-                    variant={viewMode === "admin" ? "default" : "ghost"}
-                    size="sm"
+                  </button>
+                  <span className="text-muted-foreground">/</span>
+                  <button
                     onClick={() => setViewMode("admin")}
+                    className={cn(
+                      "px-2 py-1 rounded transition-colors",
+                      viewMode === "admin"
+                        ? "text-foreground font-medium"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
                   >
                     Admin
-                  </Button>
+                  </button>
                 </div>
               )}
 
-              {/* Time Range Dropdown */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">
-                  Time Range
-                </span>
-                <Select
-                  value={timeRange}
-                  onValueChange={(value) => setTimeRange(value as any)}
+              {/* Combined Filters Popover */}
+              <div className="relative" ref={filtersRef}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFiltersOpen(!filtersOpen)}
+                  className="gap-2 text-muted-foreground font-normal"
                 >
-                  <SelectTrigger
-                    className={cn("w-[160px]", currentTimeConfig.border)}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="30d">Last 30 Days</SelectItem>
-                    <SelectItem value="90d">Last 90 Days</SelectItem>
-                    <SelectItem value="all">All Time</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  {currentTimeConfig.label} · {chainLabel}
+                </Button>
+
+                {filtersOpen && (
+                  <div className="absolute right-0 mt-2 w-56 rounded-lg border border-border bg-popover text-popover-foreground shadow-lg p-3 z-20">
+                    <div className="mb-3">
+                      <p className="text-xs text-muted-foreground mb-1.5 px-1">
+                        Time Range
+                      </p>
+                      {(["30d", "90d", "all"] as const).map((opt) => (
+                        <button
+                          key={opt}
+                          onClick={() => setTimeRange(opt)}
+                          className="w-full flex items-center justify-between px-2 py-1.5 rounded text-sm hover:bg-muted"
+                        >
+                          {timeRangeConfig[opt].label}
+                          {timeRange === opt && (
+                            <Check className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="border-t border-border pt-3">
+                      <p className="text-xs text-muted-foreground mb-1.5 px-1">
+                        Chain
+                      </p>
+                      {(
+                        [
+                          { key: "MAIN", label: "Mainnet" },
+                          { key: "TEST", label: "Testnet" },
+                          { key: "all", label: "Both" },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.key}
+                          onClick={() => setChainFilter(opt.key as ChainFilter)}
+                          className="w-full flex items-center justify-between px-2 py-1.5 rounded text-sm hover:bg-muted"
+                        >
+                          {opt.label}
+                          {chainFilter === opt.key && (
+                            <Check className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
