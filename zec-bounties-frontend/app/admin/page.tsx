@@ -144,6 +144,7 @@ export default function AdminDashboard() {
     useState<Bounty | null>(null);
   const [winnerBounty, setWinnerBounty] = useState<Bounty | null>(null);
   const [chainFilter, setChainFilter] = useState<"MAIN" | "TEST">("MAIN");
+  const [showCancelledBounties, setShowCancelledBounties] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
 
   // Filtered bounties for the table
@@ -152,13 +153,18 @@ export default function AdminDashboard() {
     [bounties, chainFilter],
   );
 
-  const filteredBounties = useMemo(
-    () =>
+  const filteredBounties = useMemo(() => {
+    let result =
       bountyStatusFilter === "ALL"
         ? chainFilteredBounties
-        : chainFilteredBounties.filter((b) => b.status === bountyStatusFilter),
-    [chainFilteredBounties, bountyStatusFilter],
-  );
+        : chainFilteredBounties.filter((b) => b.status === bountyStatusFilter);
+
+    if (bountyStatusFilter === "ALL" && !showCancelledBounties) {
+      result = result.filter((b) => b.status !== "CANCELLED");
+    }
+
+    return result;
+  }, [chainFilteredBounties, bountyStatusFilter, showCancelledBounties]);
 
   const handleStatusChange = async (
     bountyId: string,

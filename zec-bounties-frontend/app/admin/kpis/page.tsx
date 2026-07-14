@@ -514,7 +514,8 @@ export default function KpisDashboard() {
     const fetchData = async () => {
       try {
         const params = new URLSearchParams();
-        if (chainFilter !== "all") params.set("chain", chainFilter);
+        const chain = chainFilter === "all" ? "ALL" : chainFilter;
+        params.set("chain", chain);
 
         const res = await fetch(
           `${backendUrl}/api/kpis/contributors-over-time?${params.toString()}`,
@@ -536,7 +537,8 @@ export default function KpisDashboard() {
       try {
         const params = new URLSearchParams();
         params.set("timeRange", timeRange);
-        if (chainFilter !== "all") params.set("chain", chainFilter);
+        const chain = chainFilter === "all" ? "ALL" : chainFilter;
+        params.set("chain", chain);
 
         const res = await fetch(
           `${backendUrl}/api/kpis/average-earnings-over-time?${params.toString()}`,
@@ -562,7 +564,8 @@ export default function KpisDashboard() {
     const fetchBountyTypes = async () => {
       try {
         const params = new URLSearchParams();
-        if (chainFilter !== "all") params.set("chain", chainFilter);
+        const chain = chainFilter === "all" ? "ALL" : chainFilter;
+        params.set("chain", chain);
 
         const res = await fetch(
           `${backendUrl}/api/kpis/bounty-types-over-time?${params.toString()}`,
