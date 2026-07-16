@@ -641,8 +641,8 @@ export default function AdminDashboard() {
                               key={bounty.id}
                               className="hover:bg-muted/30 transition-colors"
                             >
-                              <TableCell className="font-medium py-3 pl-4 sm:pl-6">
-                                <div className="flex items-center gap-3">
+                              <TableCell className="font-medium py-3 pl-4 sm:pl-6 max-w-[180px] sm:max-w-[240px] md:max-w-[400px]">
+                                <div className="flex items-center gap-3 min-w-0">
                                   <TooltipProvider>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
@@ -665,9 +665,9 @@ export default function AdminDashboard() {
                                       </TooltipContent>
                                     </Tooltip>
                                   </TooltipProvider>
-                                  <div className="min-w-0">
+                                  <div className="min-w-0 flex-1">
                                     <button
-                                      className="line-clamp-1 text-left hover:underline hover:text-primary transition-colors text-sm font-medium"
+                                      className="block w-full truncate text-left hover:underline hover:text-primary transition-colors text-sm font-medium"
                                       onClick={() => setEditingBounty(bounty)}
                                     >
                                       {bounty.title}
