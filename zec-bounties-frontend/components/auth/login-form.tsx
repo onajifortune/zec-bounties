@@ -12,18 +12,26 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Terminal } from "lucide-react";
 import { useBounty } from "@/lib/bounty-context";
 import { useRouter } from "next/navigation";
 import { backendUrl } from "@/lib/configENV";
+import { SeedPhraseLogin } from "@/components/auth/SeedPhraseLogin";
+import { SeedPhraseSetup } from "@/components/auth/SeedPhraseSetup";
+
+type Mode = "password" | "seed-login" | "seed-setup";
 
 export function LoginForm() {
+  const [mode, setMode] = useState<Mode>("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { login, currentUser } = useBounty();
+  const { login, loginWithSession, currentUser } = useBounty();
   const router = useRouter();
+
+  const redirectByRole = (user: any) => {
+    router.push(user.role === "ADMIN" ? "/admin" : "/home");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,12 +42,7 @@ export function LoginForm() {
       const result = await login(email, password);
 
       if (result.success && result.user) {
-        // Check user role and redirect accordingly
-        if (result.user.role === "ADMIN") {
-          router.push("/admin");
-        } else {
-          router.push("/home");
-        }
+        redirectByRole(result.user);
       } else {
         setError("Invalid email or password");
       }
@@ -50,6 +53,54 @@ export function LoginForm() {
       setIsLoading(false);
     }
   };
+
+  const handleSeedAuthenticated = async (token: string, user: any) => {
+    await loginWithSession(token, user);
+    redirectByRole(user);
+  };
+
+  if (mode === "seed-login") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-foreground px-4">
+        <div className="w-full max-w-md space-y-4">
+          <SeedPhraseLogin onAuthenticated={handleSeedAuthenticated} />
+          <div className="text-center space-y-2">
+            <button
+              type="button"
+              className="text-sm text-muted-foreground hover:underline block w-full"
+              onClick={() => setMode("password")}
+            >
+              Back to standard sign in
+            </button>
+            <button
+              type="button"
+              className="text-sm text-muted-foreground hover:underline block w-full"
+              onClick={() => setMode("seed-setup")}
+            >
+              Don't have a recovery phrase? Create one
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "seed-setup") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-foreground px-4">
+        <div className="w-full max-w-md space-y-4">
+          <SeedPhraseSetup onAuthenticated={handleSeedAuthenticated} />
+          <button
+            type="button"
+            className="text-sm text-muted-foreground hover:underline block w-full text-center"
+            onClick={() => setMode("password")}
+          >
+            Back to standard sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background text-foreground px-4">
@@ -125,6 +176,35 @@ export function LoginForm() {
                 {isLoading ? "Signing in..." : "Login with GitHub"}
               </Button>
             </a>
+
+            <div className="relative py-2">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                  or
+                </span>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-11 font-medium"
+              onClick={() => setMode("seed-login")}
+              disabled={isLoading}
+            >
+              Sign in with recovery phrase
+            </Button>
+
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:underline block w-full text-center"
+              onClick={() => setMode("seed-setup")}
+            >
+              Create a passwordless account instead
+            </button>
           </form>
         </CardContent>
       </Card>

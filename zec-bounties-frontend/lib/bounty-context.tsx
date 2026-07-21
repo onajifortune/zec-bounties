@@ -78,6 +78,7 @@ interface BountyContextType {
     email: string,
     password: string,
   ) => Promise<{ success: boolean; user?: any }>;
+  loginWithSession: (token: string, user: any) => Promise<void>;
   logout: () => void;
   setCurrentUser: React.Dispatch<React.SetStateAction<User | null>>;
   requestRecoveryOtp: () => Promise<{ message: string; email: string }>;
@@ -2398,6 +2399,55 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // const login = async (
+  //   email: string,
+  //   password: string,
+  // ): Promise<{ success: boolean; user?: any }> => {
+  //   try {
+  //     const res = await fetch(`${backendUrl}/auth/login`, {
+  //       method: "POST",
+  //       headers: { "Content-Type": "application/json" },
+  //       body: JSON.stringify({ email, password }),
+  //     });
+
+  //     if (!res.ok) {
+  //       return { success: false };
+  //     }
+
+  //     const data = await res.json();
+
+  //     localStorage.setItem("authToken", data.token);
+  //     localStorage.setItem("currentUser", JSON.stringify(data.user));
+
+  //     setCurrentUser(data.user);
+
+  //     await Promise.all([
+  //       fetchBounties(),
+  //       fetchUsers(),
+  //       fetchCategories(),
+  //       fetchTotalStats(),
+  //     ]);
+
+  //     return { success: true, user: data.user };
+  //   } catch (err) {
+  //     console.error("Login failed:", err);
+  //     return { success: false };
+  //   }
+  // };
+
+  const loginWithSession = async (token: string, user: any) => {
+    localStorage.setItem("authToken", token);
+    localStorage.setItem("currentUser", JSON.stringify(user));
+    setCurrentUser(user);
+
+    await Promise.all([
+      fetchBounties(),
+      fetchUsers(),
+      fetchCategories(),
+      fetchTotalStats(),
+    ]);
+  };
+
   const login = async (
     email: string,
     password: string,
@@ -2414,18 +2464,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await res.json();
-
-      localStorage.setItem("authToken", data.token);
-      localStorage.setItem("currentUser", JSON.stringify(data.user));
-
-      setCurrentUser(data.user);
-
-      await Promise.all([
-        fetchBounties(),
-        fetchUsers(),
-        fetchCategories(),
-        fetchTotalStats(),
-      ]);
+      await loginWithSession(data.token, data.user);
 
       return { success: true, user: data.user };
     } catch (err) {
@@ -2691,6 +2730,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         currentUser,
         isLoading,
         login,
+        loginWithSession,
         logout,
         setCurrentUser,
         switchRole,
