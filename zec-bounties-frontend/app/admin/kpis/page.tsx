@@ -207,41 +207,32 @@ export default function KpisDashboard() {
 
   // Final simplified badge logic
   // Updated: Supports showing multiple badges at once
-  const getBadgeIcons = (badges?: string[], role?: string) => {
+  const getBadgeIcons = (
+    completed: number,
+    badges?: string[],
+    role?: string,
+  ) => {
     const icons = [];
 
-    // Check for avatar color override first
-    const avatarOverride = badges?.find((b) => b.startsWith("avatar:"));
+    let badgeClass = "text-muted-foreground";
 
-    if (avatarOverride) {
-      let avatarClass = "text-muted-foreground";
-
-      switch (avatarOverride) {
-        case "avatar:red":
-          avatarClass = "text-red-500";
-          break;
-        case "avatar:blue":
-          avatarClass = "text-blue-500";
-          break;
-        case "avatar:purple":
-          avatarClass = "text-purple-500";
-          break;
-        case "avatar:gold":
-          avatarClass = "text-yellow-500";
-          break;
-        case "avatar:pink":
-          avatarClass = "text-pink-500";
-          break;
-        default:
-          avatarClass = "text-muted-foreground";
-      }
-
-      icons.push(
-        <div key="avatar-override" title="Custom Avatar Color">
-          <Users className={`w-4 h-4 ${avatarClass}`} />
-        </div>,
-      );
+    if (completed >= 60) {
+      badgeClass = "text-pink-500";
+    } else if (completed >= 20) {
+      badgeClass = "text-yellow-500";
+    } else if (completed >= 10) {
+      badgeClass = "text-purple-500";
+    } else if (completed >= 5) {
+      badgeClass = "text-blue-500";
+    } else if (completed >= 1) {
+      badgeClass = "text-red-500";
     }
+
+    icons.push(
+      <div key="member" title="Member">
+        <Users className={`w-4 h-4 ${badgeClass}`} />
+      </div>,
+    );
 
     // Regular badges
     if (role === "ADMIN" || badges?.includes("admin")) {
@@ -1143,7 +1134,11 @@ export default function KpisDashboard() {
                             {viewMode === "admin" && (
                               <TableCell>
                                 <div className="flex items-center gap-1.5">
-                                  {getBadgeIcons(user?.badges, user.role)}
+                                  {getBadgeIcons(
+                                    user.completed,
+                                    user.badges,
+                                    user.role,
+                                  )}
                                 </div>
                               </TableCell>
                             )}
