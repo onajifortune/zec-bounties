@@ -17,8 +17,9 @@ import { useRouter } from "next/navigation";
 import { backendUrl } from "@/lib/configENV";
 import { SeedPhraseLogin } from "@/components/auth/SeedPhraseLogin";
 import { SeedPhraseSetup } from "@/components/auth/SeedPhraseSetup";
+import { ZcashSignIn } from "@/components/auth/ZcashSignIn";
 
-type Mode = "password" | "seed-login" | "seed-setup";
+type Mode = "password" | "seed-login" | "seed-setup" | "zcash-signin";
 
 export function LoginForm() {
   const [mode, setMode] = useState<Mode>("password");
@@ -90,6 +91,23 @@ export function LoginForm() {
       <div className="min-h-screen flex items-center justify-center bg-background text-foreground px-4">
         <div className="w-full max-w-md space-y-4">
           <SeedPhraseSetup onAuthenticated={handleSeedAuthenticated} />
+          <button
+            type="button"
+            className="text-sm text-muted-foreground hover:underline block w-full text-center"
+            onClick={() => setMode("password")}
+          >
+            Back to standard sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "zcash-signin") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-foreground px-4">
+        <div className="w-full max-w-md space-y-4">
+          <ZcashSignIn onAuthenticated={handleSeedAuthenticated} />
           <button
             type="button"
             className="text-sm text-muted-foreground hover:underline block w-full text-center"
@@ -196,6 +214,16 @@ export function LoginForm() {
               disabled={isLoading}
             >
               Sign in with recovery phrase
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-11 font-medium"
+              onClick={() => setMode("zcash-signin")}
+              disabled={isLoading}
+            >
+              Sign in with Zcash
             </Button>
 
             <button
