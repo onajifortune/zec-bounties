@@ -87,10 +87,12 @@ const BADGE_LABELS: Record<string, string> = {
   admin: "Admin",
 };
 
-const getBadgeTooltip = (badges?: string[]) =>
-  badges && badges.length > 0
-    ? badges.map((b) => BADGE_LABELS[b] ?? b).join(" • ")
+const getBadgeTooltip = (badges?: string[]) => {
+  const realBadges = badges?.filter((b) => !b.startsWith("avatar:"));
+  return realBadges && realBadges.length > 0
+    ? realBadges.map((b) => BADGE_LABELS[b] ?? b).join(" • ")
     : "Regular User";
+};
 
 function UserAvatar({
   user,
