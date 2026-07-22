@@ -169,7 +169,6 @@ router.post("/", authenticate, async (req, res) => {
 
 router.get("/", async (req, res) => {
   try {
-    console.log("GET / handler reached");
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(parseInt(req.query.limit) || 10, 50);
 
@@ -240,7 +239,7 @@ router.post("/:id/assignees", authenticate, isAdmin, async (req, res) => {
     });
     if (!bounty) return res.status(404).json({ error: "Bounty not found" });
 
-    // Run delete + create + optional status update in one transaction
+    // Run delete + create + optional status update mail(in one transaction
     const [, assignees] = await prisma.$transaction(async (tx) => {
       await tx.bountyAssignee.deleteMany({ where: { bountyId } });
 
@@ -427,7 +426,12 @@ router.patch("/:id/status", authenticate, isAdmin, async (req, res) => {
       data: {
         status,
         isApproved,
-        ...(status === "DONE" && { assignee: paymentAssigneeId }),
+        ...(status === "DONE" && {
+          assignee: paymentAssigneeId,
+          completedAt: new Date(),
+        }),
+        ...(status !== "DONE" &&
+          bounty.status === "DONE" && { completedAt: null }),
       },
       include: {
         ...ASSIGNEE_INCLUDE,
@@ -798,7 +802,10 @@ router.patch(
               status: newBountyStatus,
               ...(status === "approved" && {
                 assignee: submission.submittedBy,
+                completedAt: new Date(),
               }),
+              ...(status !== "approved" &&
+                submission.bounty.status === "DONE" && { completedAt: null }),
             },
             include: {
               createdByUser: {
