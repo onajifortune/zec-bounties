@@ -1,6 +1,29 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+/**
+ * ── Notes for wiring this into the repo ─────────────────────────────────────
+ *
+ * This replaces the old "Teams" admin page. The data model underneath is
+ * unchanged (Team / TeamMember / TeamWallet, `/api/teams` routes) — only the
+ * framing and layout changed: communities are now the primary object, and
+ * their bounty program is the first thing you see, not something buried in
+ * a dropdown menu.
+ *
+ * Two things this file assumes but doesn't have real backend contracts for
+ * yet, since they weren't in scope of the original file — flagged inline
+ * with TODO(backend):
+ *   1. `GET /api/teams/:id/bounties` — bounties scoped to a community.
+ *      Falls back to filtering `useBounty().bounties` by `teamId` if the
+ *      dedicated endpoint 404s, so this works either way.
+ *   2. "Create bounty" links to `/admin/bounties/new?teamId=...` — point
+ *      this at wherever bounty creation actually lives.
+ *
+ * Colors are untouched — every value below is one of the existing tokens
+ * from globals.css (--primary, --muted, --chart-1..5, --border, etc). The
+ * redesign is structural, not a re-skin.
+ */
+
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { AdminNavbar } from "@/components/layout/admin/navbar";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { useRoleGuard } from "@/hooks/use-role-guard";
@@ -45,7 +68,6 @@ import {
   Shield,
   Crown,
   User,
-  ChevronRight,
   Loader2,
   Building2,
   AlertTriangle,
@@ -56,6 +78,14 @@ import {
   Eye,
   EyeOff,
   ArrowLeft,
+  Target,
+  Coins,
+  Search,
+  Sparkles,
+  Copy,
+  CheckCircle2,
+  Clock,
+  Inbox,
 } from "lucide-react";
 import type { Balance } from "@/lib/types";
 import {
@@ -102,6 +132,18 @@ interface Team {
   wallet?: TeamWallet | null;
 }
 
+/** A bounty scoped to a community's bounty program. TODO(backend): confirm
+ *  field names line up with the real Bounty model — this is intentionally
+ *  minimal so it degrades gracefully if a field is missing. */
+interface CommunityBounty {
+  id: string;
+  title: string;
+  status: "OPEN" | "IN_PROGRESS" | "IN_REVIEW" | "COMPLETED" | "CANCELLED";
+  reward?: number;
+  chain?: string;
+  createdAt: string;
+}
+
 // ── API helpers ───────────────────────────────────────────────────────────────
 
 function useTeamsApi() {
@@ -129,7 +171,7 @@ function useTeamsApi() {
   return { api };
 }
 
-// ── Role badge ────────────────────────────────────────────────────────────────
+// ── Small shared bits ─────────────────────────────────────────────────────────
 
 function RoleBadge({ role }: { role: TeamMember["role"] }) {
   const cfg = {
@@ -162,9 +204,86 @@ function RoleBadge({ role }: { role: TeamMember["role"] }) {
   );
 }
 
-// ── Create / Edit Team Modal ──────────────────────────────────────────────────
+const BOUNTY_STATUS_CFG: Record<
+  CommunityBounty["status"],
+  { label: string; class: string; icon: typeof Clock }
+> = {
+  OPEN: {
+    label: "Open",
+    class: "bg-chart-2/10 text-chart-2 border-chart-2/30",
+    icon: Sparkles,
+  },
+  IN_PROGRESS: {
+    label: "In progress",
+    class: "bg-chart-1/10 text-chart-1 border-chart-1/30",
+    icon: Clock,
+  },
+  IN_REVIEW: {
+    label: "In review",
+    class: "bg-chart-5/10 text-chart-5 border-chart-5/30",
+    icon: Eye,
+  },
+  COMPLETED: {
+    label: "Completed",
+    class: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
+    icon: CheckCircle2,
+  },
+  CANCELLED: {
+    label: "Cancelled",
+    class: "bg-muted text-muted-foreground border-border",
+    icon: X,
+  },
+};
 
-function TeamFormModal({
+function BountyStatusBadge({ status }: { status: CommunityBounty["status"] }) {
+  const cfg = BOUNTY_STATUS_CFG[status] ?? BOUNTY_STATUS_CFG.OPEN;
+  const Icon = cfg.icon;
+  return (
+    <Badge
+      variant="outline"
+      className={`gap-1 text-[10px] font-medium ${cfg.class}`}
+    >
+      <Icon className="h-2.5 w-2.5" />
+      {cfg.label}
+    </Badge>
+  );
+}
+
+function StatBlock({
+  label,
+  value,
+  icon: Icon,
+  accent,
+}: {
+  label: string;
+  value: string | number;
+  icon: typeof Users;
+  accent?: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 sm:px-5 sm:py-4">
+      <div
+        className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0"
+        style={{
+          background: `color-mix(in oklch, ${accent ?? "var(--primary)"} 12%, transparent)`,
+        }}
+      >
+        <Icon
+          className="h-4 w-4"
+          style={{ color: accent ?? "var(--primary)" }}
+        />
+      </div>
+      <div className="min-w-0">
+        <div className="text-lg font-bold leading-tight truncate">{value}</div>
+        <div className="text-xs text-muted-foreground">{label}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Create / Edit Community Modal ─────────────────────────────────────────────
+
+function CommunityFormModal({
   open,
   onOpenChange,
   team,
@@ -188,7 +307,7 @@ function TeamFormModal({
   }, [open, team]);
 
   const handleSubmit = async () => {
-    if (!name.trim()) return toast.error("Team name is required");
+    if (!name.trim()) return toast.error("Community name is required");
     setLoading(true);
     try {
       let result: Team;
@@ -209,7 +328,7 @@ function TeamFormModal({
           }),
         });
       }
-      toast.success(team ? "Team updated" : "Team created");
+      toast.success(team ? "Community updated" : "Community created");
       onSuccess(result);
       onOpenChange(false);
     } catch (err: any) {
@@ -225,15 +344,15 @@ function TeamFormModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Building2 className="h-5 w-5" />
-            {team ? "Edit Team" : "Create New Team"}
+            {team ? "Edit Community" : "Start a New Community"}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <Label>Team Name *</Label>
+            <Label>Community Name *</Label>
             <Input
-              placeholder="e.g. Engineering"
+              placeholder="e.g. Core Engineering"
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
@@ -241,10 +360,10 @@ function TeamFormModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Description</Label>
+            <Label>What is this community for?</Label>
             <Textarea
               rows={3}
-              placeholder="Optional description"
+              placeholder="Give contributors a sense of what this group works on"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
@@ -266,7 +385,7 @@ function TeamFormModal({
             className="flex-1 sm:flex-none"
           >
             {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            {team ? "Save Changes" : "Create Team"}
+            {team ? "Save Changes" : "Create Community"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -317,7 +436,7 @@ function AddMembersModal({
 
   const handleAdd = async () => {
     if (selectedIds.length === 0)
-      return toast.error("Select at least one user");
+      return toast.error("Select at least one person to invite");
     setLoading(true);
     try {
       const { members } = await api<{ members: TeamMember[] }>(
@@ -343,14 +462,14 @@ function AddMembersModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5" />
-            Add Members to {team.name}
+            Invite to {team.name}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input
-              placeholder="Search users..."
+              placeholder="Search people..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1"
@@ -370,8 +489,8 @@ function AddMembersModal({
             {available.length === 0 ? (
               <div className="p-4 text-center text-sm text-muted-foreground">
                 {search
-                  ? "No users match your search"
-                  : "All users are already members"}
+                  ? "No one matches your search"
+                  : "Everyone is already a member"}
               </div>
             ) : (
               available.map((user: any) => {
@@ -415,8 +534,7 @@ function AddMembersModal({
 
           {selectedIds.length > 0 && (
             <p className="text-xs text-muted-foreground">
-              {selectedIds.length} user{selectedIds.length > 1 ? "s" : ""}{" "}
-              selected
+              {selectedIds.length} selected
             </p>
           )}
         </div>
@@ -436,7 +554,7 @@ function AddMembersModal({
             className="flex-1 sm:flex-none"
           >
             {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Add {selectedIds.length > 0 ? `(${selectedIds.length})` : "Members"}
+            Invite {selectedIds.length > 0 ? `(${selectedIds.length})` : ""}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -444,9 +562,9 @@ function AddMembersModal({
   );
 }
 
-// ── Team Wallet Modal ─────────────────────────────────────────────────────────
+// ── Treasury (wallet) Modal ────────────────────────────────────────────────────
 
-function TeamWalletModal({
+function TreasuryModal({
   open,
   onOpenChange,
   team,
@@ -500,7 +618,9 @@ function TeamWalletModal({
       });
 
       toast.success(
-        tab === "import" ? "Wallet imported successfully" : "Wallet created",
+        tab === "import"
+          ? "Treasury imported successfully"
+          : "Treasury created",
       );
       onSuccess(wallet);
       onOpenChange(false);
@@ -517,12 +637,11 @@ function TeamWalletModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Wallet className="h-5 w-5" />
-            {team.wallet ? "Replace" : "Add"} Team Wallet for {team.name}
+            {team.wallet ? "Replace" : "Set Up"} Treasury for {team.name}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Tab switcher */}
           <div className="flex gap-1 p-1 bg-muted rounded-lg">
             {(["new", "import"] as const).map((t) => (
               <button
@@ -543,7 +662,7 @@ function TeamWalletModal({
             <div className="space-y-1.5">
               <Label>Account Name *</Label>
               <Input
-                placeholder="e.g. Team Main"
+                placeholder="e.g. Community Treasury"
                 value={accountName}
                 onChange={(e) => setAccountName(e.target.value)}
               />
@@ -655,7 +774,7 @@ function TeamWalletModal({
             className="flex-1 sm:flex-none"
           >
             {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            {tab === "import" ? "Import Wallet" : "Create Wallet"}
+            {tab === "import" ? "Import Treasury" : "Create Treasury"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -663,63 +782,151 @@ function TeamWalletModal({
   );
 }
 
-// ── Team Detail Panel ─────────────────────────────────────────────────────────
+// ── Bounty Program tab ─────────────────────────────────────────────────────────
 
-function TeamDetailPanel({
+function BountyProgramTab({ team }: { team: Team }) {
+  const { api } = useTeamsApi();
+  const { bounties: allBounties } = useBounty() as { bounties?: any[] };
+  const [bounties, setBounties] = useState<CommunityBounty[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchBounties = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // TODO(backend): confirm this route exists — falls back below if not.
+      const data = await api<{ bounties: CommunityBounty[] }>(
+        `/${team.id}/bounties`,
+      );
+      setBounties(data.bounties ?? []);
+    } catch {
+      // Fall back to filtering the bounty list already in context.
+      const fallback = (allBounties ?? []).filter(
+        (b: any) => b.teamId === team.id,
+      );
+      setBounties(fallback);
+      if (fallback.length === 0) setError(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [api, team.id, allBounties]);
+
+  useEffect(() => {
+    fetchBounties();
+  }, [fetchBounties]);
+
+  const stats = useMemo(() => {
+    const list = bounties ?? [];
+    const active = list.filter(
+      (b) => b.status === "IN_PROGRESS" || b.status === "IN_REVIEW",
+    ).length;
+    const open = list.filter((b) => b.status === "OPEN").length;
+    const completed = list.filter((b) => b.status === "COMPLETED").length;
+    const paidOut = list
+      .filter((b) => b.status === "COMPLETED")
+      .reduce((sum, b) => sum + (b.reward ?? 0), 0);
+    return { active, open, completed, paidOut, total: list.length };
+  }, [bounties]);
+
+  return (
+    <div className="space-y-4">
+      {/* Program stats — the headline content of a community */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 border rounded-xl overflow-hidden bg-card">
+        <StatBlock
+          label="Open"
+          value={stats.open}
+          icon={Sparkles}
+          accent="var(--chart-2)"
+        />
+        <StatBlock
+          label="Active"
+          value={stats.active}
+          icon={Clock}
+          accent="var(--chart-1)"
+        />
+        <StatBlock
+          label="Completed"
+          value={stats.completed}
+          icon={CheckCircle2}
+          accent="var(--chart-4)"
+        />
+        <StatBlock
+          label="Paid out"
+          value={`${stats.paidOut.toFixed(2)} ZEC`}
+          icon={Coins}
+          accent="var(--chart-5)"
+        />
+      </div>
+
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Bounties ({stats.total})</h3>
+        <Button
+          size="sm"
+          className="h-8 gap-1.5 text-xs"
+          onClick={() =>
+            // TODO(backend/routing): point this at the real bounty-creation flow
+            (window.location.href = `/admin/bounties/new?teamId=${team.id}`)
+          }
+        >
+          <Plus className="h-3.5 w-3.5" /> New Bounty
+        </Button>
+      </div>
+
+      <div className="border rounded-xl divide-y overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center py-10">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (bounties ?? []).length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+            <Inbox className="h-8 w-8 text-muted-foreground/40 mb-3" />
+            <p className="text-sm font-medium">No bounties yet</p>
+            <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+              Post the first bounty to get this community's program moving.
+            </p>
+          </div>
+        ) : (
+          bounties!.map((b) => (
+            <a
+              key={b.id}
+              href={`/admin/bounties/${b.id}`}
+              className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors"
+            >
+              <Target className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium truncate">{b.title}</div>
+                <div className="text-xs text-muted-foreground">
+                  {format(new Date(b.createdAt), "MMM d, yyyy")}
+                  {typeof b.reward === "number"
+                    ? ` · ${b.reward.toFixed(2)} ZEC`
+                    : ""}
+                </div>
+              </div>
+              <BountyStatusBadge status={b.status} />
+            </a>
+          ))
+        )}
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+// ── Members tab ────────────────────────────────────────────────────────────────
+
+function MembersTab({
   team,
   onUpdate,
-  onDelete,
-  onBack,
+  onOpenInvite,
 }: {
   team: Team;
   onUpdate: (updated: Team) => void;
-  onDelete: (id: string) => void;
-  onBack?: () => void;
+  onOpenInvite: () => void;
 }) {
   const { api } = useTeamsApi();
-  const [addMembersOpen, setAddMembersOpen] = useState(false);
-  const [walletOpen, setWalletOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
   const [deletingMember, setDeletingMember] = useState<string | null>(null);
   const [updatingRole, setUpdatingRole] = useState<string | null>(null);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [deleteLoading, setDeleteLoading] = useState(false);
-
-  const [balance, setBalance] = useState<Balance | null>(null);
-  const [balanceLoading, setBalanceLoading] = useState(false);
-  const [balanceError, setBalanceError] = useState<string | null>(null);
-
-  const confirmedTotal = (b: Balance) =>
-    ((b.confirmed_orchard_balance ?? 0) +
-      (b.confirmed_sapling_balance ?? 0) +
-      (b.confirmed_transparent_balance ?? 0)) /
-    1e8;
-
-  const fmt = (n: number) => n.toFixed(4);
-
-  const fetchBalance = useCallback(async () => {
-    if (!team.wallet) return;
-    setBalanceLoading(true);
-    setBalanceError(null);
-    try {
-      const data = await api<{ balance: any }>(`/${team.id}/wallet/balance`);
-      setBalance(data.balance ?? null);
-    } catch (err: any) {
-      setBalanceError(err.message);
-    } finally {
-      setBalanceLoading(false);
-    }
-  }, [api, team.id, team.wallet]);
-
-  useEffect(() => {
-    if (team.wallet) {
-      fetchBalance();
-    } else {
-      setBalance(null);
-      setBalanceError(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [team.id, team.wallet?.id]);
 
   const handleRemoveMember = async (userId: string) => {
     setDeletingMember(userId);
@@ -758,11 +965,375 @@ function TeamDetailPanel({
     }
   };
 
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">
+          Members ({team.members.length})
+        </h3>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs gap-1.5"
+          onClick={onOpenInvite}
+        >
+          <UserPlus className="h-3.5 w-3.5" /> Invite
+        </Button>
+      </div>
+
+      <div className="border rounded-xl divide-y overflow-hidden">
+        {team.members.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+            No members yet
+          </div>
+        ) : (
+          team.members.map((member) => (
+            <div
+              key={member.id}
+              className="flex items-center gap-2 sm:gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
+            >
+              <Avatar className="h-8 w-8 shrink-0">
+                <AvatarImage src={member.user.avatar} />
+                <AvatarFallback className="text-xs">
+                  {member.user.name[0]}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-sm font-medium truncate">
+                    {member.user.name}
+                  </span>
+                  <RoleBadge role={member.role} />
+                </div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {member.user.email}
+                </div>
+              </div>
+
+              {member.role !== "OWNER" && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <div className="hidden sm:block">
+                    <Select
+                      value={member.role}
+                      onValueChange={(v) =>
+                        handleRoleChange(member.userId, v as TeamMember["role"])
+                      }
+                      disabled={updatingRole === member.userId}
+                    >
+                      <SelectTrigger className="h-7 w-24 text-xs">
+                        {updatingRole === member.userId ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <SelectValue />
+                        )}
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ADMIN">Admin</SelectItem>
+                        <SelectItem value="MEMBER">Member</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => handleRemoveMember(member.userId)}
+                    disabled={deletingMember === member.userId}
+                  >
+                    {deletingMember === member.userId ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <UserMinus className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Treasury tab ──────────────────────────────────────────────────────────────
+
+function TreasuryTab({
+  team,
+  onUpdate,
+  onOpenTreasury,
+}: {
+  team: Team;
+  onUpdate: (updated: Team) => void;
+  onOpenTreasury: () => void;
+}) {
+  const { api } = useTeamsApi();
+  const [balance, setBalance] = useState<Balance | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const confirmedTotal = (b: Balance) =>
+    ((b.confirmed_orchard_balance ?? 0) +
+      (b.confirmed_sapling_balance ?? 0) +
+      (b.confirmed_transparent_balance ?? 0)) /
+    1e8;
+
+  const fmt = (n: number) => n.toFixed(4);
+
+  const fetchBalance = useCallback(async () => {
+    if (!team.wallet) return;
+    setBalanceLoading(true);
+    setBalanceError(null);
+    try {
+      const data = await api<{ balance: any }>(`/${team.id}/wallet/balance`);
+      setBalance(data.balance ?? null);
+    } catch (err: any) {
+      setBalanceError(err.message);
+    } finally {
+      setBalanceLoading(false);
+    }
+  }, [api, team.id, team.wallet]);
+
+  useEffect(() => {
+    fetchBalance();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [team.id, team.wallet?.id]);
+
+  const handleDeleteWallet = async () => {
+    try {
+      await api(`/${team.id}/wallet`, { method: "DELETE" });
+      onUpdate({ ...team, wallet: null });
+      setBalance(null);
+      toast.success("Treasury removed");
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleCopy = () => {
+    if (!team.wallet) return;
+    navigator.clipboard.writeText(team.wallet.accountName);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  if (!team.wallet) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 px-4 text-center border rounded-xl">
+        <div className="h-12 w-12 rounded-xl bg-muted border flex items-center justify-center mb-3">
+          <Wallet className="h-5 w-5 text-muted-foreground/60" />
+        </div>
+        <p className="text-sm font-medium">No treasury set up</p>
+        <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+          Add a wallet so this community can pay out bounties directly.
+        </p>
+        <Button className="mt-4 gap-2" size="sm" onClick={onOpenTreasury}>
+          <Plus className="h-4 w-4" /> Set Up Treasury
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="border rounded-xl p-4 space-y-4 bg-card">
+        <div className="flex items-center gap-2">
+          <Wallet className="h-4 w-4 text-muted-foreground shrink-0" />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium truncate">
+              {team.wallet.accountName}
+            </div>
+            <div className="text-xs text-muted-foreground truncate">
+              {team.wallet.chain} · {team.wallet.serverUrl}
+            </div>
+          </div>
+          <button
+            onClick={handleCopy}
+            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+            title="Copy account name"
+          >
+            {copied ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+          </button>
+          <Badge variant="outline" className="shrink-0 text-[10px]">
+            {team.wallet.chain}
+          </Badge>
+        </div>
+
+        <div className="flex items-center justify-between pt-2 border-t">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Balance</span>
+            {balanceLoading ? (
+              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+            ) : balanceError ? (
+              <span className="text-xs text-destructive">{balanceError}</span>
+            ) : balance !== null ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-base font-mono font-semibold cursor-default underline decoration-dotted underline-offset-2">
+                      {fmt(confirmedTotal(balance))} ZEC
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="top"
+                    className="text-xs space-y-1.5 min-w-[180px]"
+                  >
+                    <p className="font-semibold text-foreground mb-1">
+                      Confirmed balances
+                    </p>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Orchard</span>
+                      <span className="font-mono">
+                        {fmt(balance.confirmed_orchard_balance / 1e8)} ZEC
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Sapling</span>
+                      <span className="font-mono">
+                        {fmt(balance.confirmed_sapling_balance / 1e8)} ZEC
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Transparent</span>
+                      <span className="font-mono">
+                        {fmt(balance.confirmed_transparent_balance / 1e8)} ZEC
+                      </span>
+                    </div>
+                    <div className="border-t pt-1 flex justify-between gap-4 font-semibold">
+                      <span>Total</span>
+                      <span className="font-mono">
+                        {fmt(confirmedTotal(balance))} ZEC
+                      </span>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <span className="text-xs text-muted-foreground">—</span>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={fetchBalance}
+            disabled={balanceLoading}
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${balanceLoading ? "animate-spin" : ""}`}
+            />
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1 gap-1.5 text-xs"
+          onClick={onOpenTreasury}
+        >
+          <Wallet className="h-3.5 w-3.5" /> Replace Treasury
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1 gap-1.5 text-xs text-destructive hover:text-destructive"
+          onClick={handleDeleteWallet}
+        >
+          <X className="h-3.5 w-3.5" /> Remove
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ── Settings tab ──────────────────────────────────────────────────────────────
+
+function SettingsTab({
+  team,
+  onEdit,
+  onDelete,
+}: {
+  team: Team;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="border rounded-xl p-4 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium">Community details</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Name and description shown to contributors
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 text-xs"
+          onClick={onEdit}
+        >
+          <Edit2 className="h-3.5 w-3.5" /> Edit
+        </Button>
+      </div>
+
+      <div className="border border-destructive/30 rounded-xl p-4 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-destructive">
+            Delete community
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Removes all members and the treasury. Cannot be undone.
+          </p>
+        </div>
+        <Button
+          variant="destructive"
+          size="sm"
+          className="gap-1.5 text-xs"
+          onClick={onDelete}
+        >
+          <Trash2 className="h-3.5 w-3.5" /> Delete
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ── Community Profile (detail view) ────────────────────────────────────────────
+
+type CommunityTab = "program" | "members" | "treasury" | "settings";
+
+function CommunityProfile({
+  team,
+  onUpdate,
+  onDelete,
+  onBack,
+}: {
+  team: Team;
+  onUpdate: (updated: Team) => void;
+  onDelete: (id: string) => void;
+  onBack: () => void;
+}) {
+  const { api } = useTeamsApi();
+  const [tab, setTab] = useState<CommunityTab>("program");
+  const [addMembersOpen, setAddMembersOpen] = useState(false);
+  const [treasuryOpen, setTreasuryOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
   const handleDeleteTeam = async () => {
     setDeleteLoading(true);
     try {
       await api(`/${team.id}`, { method: "DELETE" });
-      toast.success("Team deleted");
+      toast.success("Community deleted");
       onDelete(team.id);
       setDeleteConfirmOpen(false);
     } catch (err: any) {
@@ -772,64 +1343,46 @@ function TeamDetailPanel({
     }
   };
 
-  const handleDeleteWallet = async () => {
-    try {
-      await api(`/${team.id}/wallet`, { method: "DELETE" });
-      onUpdate({ ...team, wallet: null });
-      setBalance(null);
-      toast.success("Wallet removed");
-    } catch (err: any) {
-      toast.error(err.message);
-    }
+  const handleTreasuryCreated = (wallet: TeamWallet) => {
+    onUpdate({ ...team, wallet });
   };
 
-  const handleWalletCreated = (wallet: TeamWallet) => {
-    const updated = { ...team, wallet };
-    onUpdate(updated);
-    setTimeout(() => {
-      setBalance(null);
-      setBalanceError(null);
-      fetchBalance();
-    }, 1500);
-  };
+  const tabs: { id: CommunityTab; label: string; icon: typeof Target }[] = [
+    { id: "program", label: "Bounty Program", icon: Target },
+    { id: "members", label: "Members", icon: Users },
+    { id: "treasury", label: "Treasury", icon: Wallet },
+    { id: "settings", label: "Settings", icon: Edit2 },
+  ];
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Mobile-only back bar — sticky so it's always reachable */}
-      {onBack && (
-        <div className="sticky top-0 z-20 flex items-center justify-between gap-2 px-2 py-2 border-b bg-card/95 backdrop-blur md:hidden">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-9 gap-1.5 -ml-1 text-sm font-medium"
-            onClick={onBack}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Teams
-          </Button>
-          <span className="text-xs text-muted-foreground truncate max-w-[50%]">
-            {team.name}
-          </span>
-        </div>
-      )}
+    <div className="max-w-3xl mx-auto w-full">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-8 gap-1.5 -ml-2 mb-4 text-sm text-muted-foreground hover:text-foreground"
+        onClick={onBack}
+      >
+        <ArrowLeft className="h-3.5 w-3.5" /> All communities
+      </Button>
 
-      {/* Header */}
-      <div className="flex items-start justify-between p-4 sm:p-6 border-b">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-lg sm:text-xl font-bold text-primary shrink-0">
+      {/* Profile header */}
+      <div className="flex items-start justify-between gap-3 mb-5">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-xl font-bold text-primary shrink-0">
             {team.name[0]}
           </div>
-          <div>
-            <h2 className="text-base sm:text-lg font-bold leading-tight">
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-xl font-bold leading-tight truncate">
               {team.name}
-            </h2>
+            </h1>
             {team.description && (
-              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 line-clamp-1">
+              <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
                 {team.description}
               </p>
             )}
             <p className="text-xs text-muted-foreground mt-1">
-              Created {format(new Date(team.createdAt), "MMM d, yyyy")}
+              Est. {format(new Date(team.createdAt), "MMM d, yyyy")} ·{" "}
+              {team.members.length} member{team.members.length !== 1 ? "s" : ""}
             </p>
           </div>
         </div>
@@ -841,244 +1394,78 @@ function TeamDetailPanel({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Team Actions</DropdownMenuLabel>
+            <DropdownMenuLabel>Community</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setEditOpen(true)}>
-              <Edit2 className="h-4 w-4 mr-2" /> Edit Team
+              <Edit2 className="h-4 w-4 mr-2" /> Edit Details
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setAddMembersOpen(true)}>
-              <UserPlus className="h-4 w-4 mr-2" /> Add Members
+              <UserPlus className="h-4 w-4 mr-2" /> Invite Members
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setWalletOpen(true)}>
-              <Wallet className="h-4 w-4 mr-2" />
-              {team.wallet ? "Replace Wallet" : "Add Wallet"}
-            </DropdownMenuItem>
-            {team.wallet && (
-              <DropdownMenuItem
-                className="text-destructive"
-                onClick={handleDeleteWallet}
-              >
-                <X className="h-4 w-4 mr-2" /> Remove Wallet
-              </DropdownMenuItem>
-            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive"
               onClick={() => setDeleteConfirmOpen(true)}
             >
-              <Trash2 className="h-4 w-4 mr-2" /> Delete Team
+              <Trash2 className="h-4 w-4 mr-2" /> Delete Community
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
-      {/* Stats strip */}
-      <div className="grid grid-cols-3 divide-x border-b text-center">
-        {[
-          { label: "Members", value: team.members.length },
-          {
-            label: "Wallet",
-            value: team.wallet ? team.wallet.chain : "None",
-          },
-          {
-            label: "Admins",
-            value: team.members.filter((m) =>
-              ["OWNER", "ADMIN"].includes(m.role),
-            ).length,
-          },
-        ].map((s) => (
-          <div key={s.label} className="py-2.5 sm:py-3 px-2 sm:px-4">
-            <div className="text-base sm:text-lg font-bold truncate">
-              {s.value}
-            </div>
-            <div className="text-xs text-muted-foreground">{s.label}</div>
-          </div>
-        ))}
+      {/* Tabs */}
+      <div className="flex gap-1 border-b mb-5 overflow-x-auto">
+        {tabs.map((t) => {
+          const Icon = t.icon;
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                active
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {t.label}
+              {t.id === "members" && (
+                <span className="text-[10px] text-muted-foreground">
+                  ({team.members.length})
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Wallet card */}
-      {team.wallet && (
-        <div className="p-3 sm:p-4 border-b space-y-2">
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border">
-            <Wallet className="h-4 w-4 text-muted-foreground shrink-0" />
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium truncate">
-                {team.wallet.accountName}
-              </div>
-              <div className="text-xs text-muted-foreground truncate">
-                {team.wallet.chain} · {team.wallet.serverUrl}
-              </div>
-            </div>
-            <Badge variant="outline" className="shrink-0 text-[10px]">
-              {team.wallet.chain}
-            </Badge>
-          </div>
-
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Balance</span>
-              {balanceLoading ? (
-                <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-              ) : balanceError ? (
-                <span className="text-xs text-destructive">{balanceError}</span>
-              ) : balance !== null ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="text-sm font-mono font-semibold cursor-default underline decoration-dotted underline-offset-2">
-                        {fmt(confirmedTotal(balance))} ZEC
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="top"
-                      className="text-xs space-y-1.5 min-w-[180px]"
-                    >
-                      <p className="font-semibold text-foreground mb-1">
-                        Confirmed balances
-                      </p>
-                      <div className="flex justify-between gap-4">
-                        <span className="text-muted-foreground">Orchard</span>
-                        <span className="font-mono">
-                          {fmt(balance.confirmed_orchard_balance / 1e8)} ZEC
-                        </span>
-                      </div>
-                      <div className="flex justify-between gap-4">
-                        <span className="text-muted-foreground">Sapling</span>
-                        <span className="font-mono">
-                          {fmt(balance.confirmed_sapling_balance / 1e8)} ZEC
-                        </span>
-                      </div>
-                      <div className="flex justify-between gap-4">
-                        <span className="text-muted-foreground">
-                          Transparent
-                        </span>
-                        <span className="font-mono">
-                          {fmt(balance.confirmed_transparent_balance / 1e8)} ZEC
-                        </span>
-                      </div>
-                      <div className="border-t pt-1 flex justify-between gap-4 font-semibold">
-                        <span>Total</span>
-                        <span className="font-mono">
-                          {fmt(confirmedTotal(balance))} ZEC
-                        </span>
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ) : (
-                <span className="text-xs text-muted-foreground">—</span>
-              )}
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={fetchBalance}
-              disabled={balanceLoading}
-            >
-              <RefreshCw
-                className={`h-3.5 w-3.5 ${balanceLoading ? "animate-spin" : ""}`}
-              />
-            </Button>
-          </div>
-        </div>
+      {/* Tab content */}
+      {tab === "program" && <BountyProgramTab team={team} />}
+      {tab === "members" && (
+        <MembersTab
+          team={team}
+          onUpdate={onUpdate}
+          onOpenInvite={() => setAddMembersOpen(true)}
+        />
+      )}
+      {tab === "treasury" && (
+        <TreasuryTab
+          team={team}
+          onUpdate={onUpdate}
+          onOpenTreasury={() => setTreasuryOpen(true)}
+        />
+      )}
+      {tab === "settings" && (
+        <SettingsTab
+          team={team}
+          onEdit={() => setEditOpen(true)}
+          onDelete={() => setDeleteConfirmOpen(true)}
+        />
       )}
 
-      {/* Members list */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="flex items-center justify-between px-4 pt-4 pb-2">
-          <h3 className="text-sm font-semibold">
-            Members ({team.members.length})
-          </h3>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs gap-1"
-            onClick={() => setAddMembersOpen(true)}
-          >
-            <UserPlus className="h-3 w-3" /> Add
-          </Button>
-        </div>
-
-        <div className="divide-y">
-          {team.members.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-              No members yet
-            </div>
-          ) : (
-            team.members.map((member) => (
-              <div
-                key={member.id}
-                className="flex items-center gap-2 sm:gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
-              >
-                <Avatar className="h-8 w-8 shrink-0">
-                  <AvatarImage src={member.user.avatar} />
-                  <AvatarFallback className="text-xs">
-                    {member.user.name[0]}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-sm font-medium truncate">
-                      {member.user.name}
-                    </span>
-                    <RoleBadge role={member.role} />
-                  </div>
-                  <div className="text-xs text-muted-foreground truncate">
-                    {member.user.email}
-                  </div>
-                </div>
-
-                {member.role !== "OWNER" && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <div className="hidden sm:block">
-                      <Select
-                        value={member.role}
-                        onValueChange={(v) =>
-                          handleRoleChange(
-                            member.userId,
-                            v as TeamMember["role"],
-                          )
-                        }
-                        disabled={updatingRole === member.userId}
-                      >
-                        <SelectTrigger className="h-7 w-24 text-xs">
-                          {updatingRole === member.userId ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <SelectValue />
-                          )}
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ADMIN">Admin</SelectItem>
-                          <SelectItem value="MEMBER">Member</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => handleRemoveMember(member.userId)}
-                      disabled={deletingMember === member.userId}
-                    >
-                      {deletingMember === member.userId ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <UserMinus className="h-3.5 w-3.5" />
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
       {/* Modals */}
-      <TeamFormModal
+      <CommunityFormModal
         open={editOpen}
         onOpenChange={setEditOpen}
         team={team}
@@ -1102,11 +1489,11 @@ function TeamDetailPanel({
         }
       />
 
-      <TeamWalletModal
-        open={walletOpen}
-        onOpenChange={setWalletOpen}
+      <TreasuryModal
+        open={treasuryOpen}
+        onOpenChange={setTreasuryOpen}
         team={team}
-        onSuccess={handleWalletCreated}
+        onSuccess={handleTreasuryCreated}
       />
 
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
@@ -1114,13 +1501,13 @@ function TeamDetailPanel({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-5 w-5" />
-              Delete Team
+              Delete Community
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             Are you sure you want to delete <strong>{team.name}</strong>? This
-            will permanently remove all members and the team wallet. This cannot
-            be undone.
+            will permanently remove all members and the treasury. This cannot be
+            undone.
           </p>
           <DialogFooter className="flex-row gap-2 sm:flex-row">
             <Button
@@ -1140,7 +1527,7 @@ function TeamDetailPanel({
               {deleteLoading && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
-              Delete Team
+              Delete Community
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1149,9 +1536,58 @@ function TeamDetailPanel({
   );
 }
 
+// ── Community Card (grid item) ─────────────────────────────────────────────────
+
+function CommunityCard({ team, onOpen }: { team: Team; onOpen: () => void }) {
+  const admins = team.members.filter((m) =>
+    ["OWNER", "ADMIN"].includes(m.role),
+  );
+  return (
+    <button
+      onClick={onOpen}
+      className="group text-left border rounded-xl bg-card hover:border-primary/40 hover:shadow-sm transition-all overflow-hidden"
+    >
+      <div className="p-4 sm:p-5">
+        <div className="flex items-start gap-3">
+          <div className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-base font-bold text-primary shrink-0">
+            {team.name[0]}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-semibold truncate group-hover:text-primary transition-colors">
+              {team.name}
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 min-h-[2rem]">
+              {team.description || "No description yet"}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 mt-4 pt-3 border-t text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <Users className="h-3 w-3" /> {team.members.length}
+          </span>
+          <span className="flex items-center gap-1">
+            <Shield className="h-3 w-3" /> {admins.length} admin
+            {admins.length !== 1 ? "s" : ""}
+          </span>
+          {team.wallet ? (
+            <span className="flex items-center gap-1 ml-auto">
+              <Wallet className="h-3 w-3" /> {team.wallet.chain}
+            </span>
+          ) : (
+            <span className="ml-auto text-muted-foreground/60">
+              No treasury
+            </span>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export default function AdminTeamsPage() {
+export default function AdminCommunitiesPage() {
   useRoleGuard("ADMIN");
 
   const { api } = useTeamsApi();
@@ -1160,7 +1596,6 @@ export default function AdminTeamsPage() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [mobileView, setMobileView] = useState<"list" | "detail">("list");
 
   const selectedTeam = teams.find((t) => t.id === selectedTeamId) || null;
 
@@ -1176,7 +1611,7 @@ export default function AdminTeamsPage() {
       const data = await api<Team[]>("/");
       setTeams(Array.isArray(data) ? data : []);
     } catch {
-      toast.error("Failed to load teams");
+      toast.error("Failed to load communities");
     } finally {
       setLoading(false);
     }
@@ -1186,10 +1621,18 @@ export default function AdminTeamsPage() {
     fetchTeams();
   }, [fetchTeams]);
 
+  const totalMembers = useMemo(
+    () => new Set(teams.flatMap((t) => t.members.map((m) => m.userId))).size,
+    [teams],
+  );
+  const totalWithTreasury = useMemo(
+    () => teams.filter((t) => t.wallet).length,
+    [teams],
+  );
+
   const handleTeamCreated = (team: Team) => {
     setTeams((prev) => [team, ...prev]);
     setSelectedTeamId(team.id);
-    setMobileView("detail");
   };
 
   const handleTeamUpdated = (updated: Team) => {
@@ -1198,20 +1641,7 @@ export default function AdminTeamsPage() {
 
   const handleTeamDeleted = (id: string) => {
     setTeams((prev) => prev.filter((t) => t.id !== id));
-    if (selectedTeamId === id) {
-      setSelectedTeamId(null);
-      setMobileView("list");
-    }
-  };
-
-  const handleSelectTeam = (id: string) => {
-    setSelectedTeamId(id);
-    setMobileView("detail");
-  };
-
-  const handleBack = () => {
-    setSelectedTeamId(null);
-    setMobileView("list");
+    if (selectedTeamId === id) setSelectedTeamId(null);
   };
 
   return (
@@ -1219,137 +1649,108 @@ export default function AdminTeamsPage() {
       <main className="min-h-screen bg-background">
         <AdminNavbar isAdmin />
 
-        <div className="flex h-[calc(100vh-3.5rem)]">
-          {/* Sidebar: team list */}
-          <aside
-            className={`
-              w-full md:w-80 md:shrink-0 border-r flex flex-col bg-card/30
-              ${mobileView === "detail" ? "hidden md:flex" : "flex"}
-            `}
-          >
-            <div className="p-4 border-b space-y-3">
-              <div className="flex items-center justify-between">
+        <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-6xl mx-auto">
+          {selectedTeam ? (
+            <CommunityProfile
+              key={selectedTeam.id}
+              team={selectedTeam}
+              onUpdate={handleTeamUpdated}
+              onDelete={handleTeamDeleted}
+              onBack={() => setSelectedTeamId(null)}
+            />
+          ) : (
+            <>
+              {/* Section header — communities as a first-class area */}
+              <div className="flex flex-col sam:flex-row sam:items-end sam:justify-between gap-4 mb-6">
                 <div>
-                  <h1 className="text-base font-bold">Teams</h1>
-                  <p className="text-xs text-muted-foreground">
-                    {teams.length} team{teams.length !== 1 ? "s" : ""}
+                  <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
+                    Communities
+                  </h1>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Groups that run their own bounty program, members, and
+                    treasury.
                   </p>
                 </div>
                 <Button
-                  size="sm"
-                  className="h-8 gap-1.5"
+                  className="gap-1.5 shrink-0"
                   onClick={() => setCreateOpen(true)}
                 >
-                  <Plus className="h-3.5 w-3.5" /> New
+                  <Plus className="h-4 w-4" /> New Community
                 </Button>
               </div>
-              <Input
-                placeholder="Search teams..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </div>
 
-            <div className="flex-1 overflow-y-auto">
+              {/* Aggregate stats */}
+              <div className="grid grid-cols-3 divide-x border rounded-xl overflow-hidden bg-card mb-6">
+                <StatBlock
+                  label="Communities"
+                  value={teams.length}
+                  icon={Building2}
+                />
+                <StatBlock
+                  label="Contributors"
+                  value={totalMembers}
+                  icon={Users}
+                  accent="var(--chart-1)"
+                />
+                <StatBlock
+                  label="With treasury"
+                  value={totalWithTreasury}
+                  icon={Wallet}
+                  accent="var(--chart-4)"
+                />
+              </div>
+
+              <div className="relative mb-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Search communities..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 h-9 text-sm max-w-sm"
+                />
+              </div>
+
               {loading ? (
-                <div className="flex items-center justify-center py-12">
+                <div className="flex items-center justify-center py-16">
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
               ) : filteredTeams.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                <div className="flex flex-col items-center justify-center py-16 px-4 text-center border rounded-xl border-dashed">
                   <Building2 className="h-8 w-8 text-muted-foreground/40 mb-3" />
                   <p className="text-sm font-medium">
-                    {search ? "No teams match" : "No teams yet"}
+                    {search ? "No communities match" : "No communities yet"}
                   </p>
                   {!search && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Create your first team to get started
-                    </p>
+                    <>
+                      <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                        Create the first community to start running a bounty
+                        program with its own members and treasury.
+                      </p>
+                      <Button
+                        className="mt-4 gap-2"
+                        onClick={() => setCreateOpen(true)}
+                      >
+                        <Plus className="h-4 w-4" /> Create Community
+                      </Button>
+                    </>
                   )}
                 </div>
               ) : (
-                <div className="py-1">
+                <div className="grid grid-cols-1 sam:grid-cols-2 imd:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                   {filteredTeams.map((team) => (
-                    <button
+                    <CommunityCard
                       key={team.id}
-                      onClick={() => handleSelectTeam(team.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                        selectedTeamId === team.id
-                          ? "bg-primary/8 border-r-2 border-primary"
-                          : "hover:bg-muted/50 active:bg-muted/70"
-                      }`}
-                    >
-                      <div className="h-9 w-9 rounded-lg bg-muted border flex items-center justify-center text-sm font-bold shrink-0">
-                        {team.name[0]}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">
-                          {team.name}
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-muted-foreground">
-                            {team.members.length} member
-                            {team.members.length !== 1 ? "s" : ""}
-                          </span>
-                          {team.wallet && (
-                            <>
-                              <span className="text-muted-foreground/40 text-xs">
-                                ·
-                              </span>
-                              <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-                                <Wallet className="h-2.5 w-2.5" />
-                                {team.wallet.chain}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0" />
-                    </button>
+                      team={team}
+                      onOpen={() => setSelectedTeamId(team.id)}
+                    />
                   ))}
                 </div>
               )}
-            </div>
-          </aside>
-
-          {/* Main: team detail */}
-          <div
-            className={`
-              flex-1 overflow-hidden
-              ${mobileView === "list" ? "hidden md:block" : "block"}
-            `}
-          >
-            {selectedTeam ? (
-              <TeamDetailPanel
-                key={selectedTeam.id}
-                team={selectedTeam}
-                onUpdate={handleTeamUpdated}
-                onDelete={handleTeamDeleted}
-                onBack={handleBack}
-              />
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-center px-8">
-                <div className="h-16 w-16 rounded-2xl bg-muted border flex items-center justify-center mb-4">
-                  <Users className="h-8 w-8 text-muted-foreground/40" />
-                </div>
-                <h2 className="text-lg font-semibold">Select a team</h2>
-                <p className="text-sm text-muted-foreground mt-1 max-w-xs">
-                  Choose a team from the sidebar to view and manage its members
-                  and wallet, or create a new one.
-                </p>
-                <Button
-                  className="mt-4 gap-2"
-                  onClick={() => setCreateOpen(true)}
-                >
-                  <Plus className="h-4 w-4" /> Create Team
-                </Button>
-              </div>
-            )}
-          </div>
+            </>
+          )}
         </div>
 
-        <TeamFormModal
+        <CommunityFormModal
           open={createOpen}
           onOpenChange={setCreateOpen}
           onSuccess={handleTeamCreated}

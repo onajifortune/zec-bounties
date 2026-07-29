@@ -59,6 +59,8 @@ export interface Bounty {
   assigneeUser?: User; // Populated user data
   applications?: BountyApplication[];
   categoryId?: string;
+  teamId?: string | null;
+  team?: { id: string; name: string; description?: string } | null;
   category?: BountyCategory;
   difficulty: "Easy" | "Medium" | "Hard";
   chain: "MAIN" | "TEST";

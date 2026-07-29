@@ -304,6 +304,14 @@ interface BountyContextType {
   ) => Promise<TeamWallet>;
   deleteTeamWallet: (teamId: string) => Promise<void>;
   currentTeam: Team | null;
+  communities: {
+    id: string;
+    name: string;
+    description?: string;
+    _count: { members: number; bounties: number };
+  }[];
+  communitiesLoading: boolean;
+  fetchCommunities: () => Promise<void>;
 }
 
 const BountyContext = createContext<BountyContextType | undefined>(undefined);
@@ -359,6 +367,15 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   );
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
+  const [communities, setCommunities] = useState<
+    {
+      id: string;
+      name: string;
+      description?: string;
+      _count: { members: number; bounties: number };
+    }[]
+  >([]);
+  const [communitiesLoading, setCommunitiesLoading] = useState(false);
 
   // Helper function to get auth headers
   const getAuthHeaders = () => {
@@ -538,6 +555,22 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       setZcashParams([]);
     } finally {
       setZcashParamsLoading(false);
+    }
+  };
+
+  const fetchCommunities = async () => {
+    setCommunitiesLoading(true);
+    try {
+      const res = await fetch(`${backendUrl}/api/teams/public`, {
+        headers: getPublicHeaders(),
+      });
+      if (!res.ok) throw new Error("Failed to fetch communities");
+      setCommunities(await res.json());
+    } catch (error) {
+      console.error("Failed to fetch communities:", error);
+      setCommunities([]);
+    } finally {
+      setCommunitiesLoading(false);
     }
   };
 
@@ -1759,6 +1792,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         fetchUsers(),
         fetchCategories(),
         fetchTotalStats(),
+        fetchCommunities(),
       ]);
 
       if (savedToken) {
@@ -2438,6 +2472,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         fetchUsers(),
         fetchCategories(),
         fetchTotalStats(),
+        fetchCommunities(),
       ]);
 
       return { success: true, user: data.user };
@@ -2815,6 +2850,9 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         importTeamWallet,
         deleteTeamWallet,
         currentTeam,
+        communities,
+        communitiesLoading,
+        fetchCommunities,
       }}
     >
       {children}
