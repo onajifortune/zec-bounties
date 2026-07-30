@@ -256,3 +256,14 @@ export type BountyTypesOverTime = {
   month: string;
   [category: string]: string | number;
 };
+
+export interface LeaderboardEntry {
+  id: string;
+  name: string;
+  nickname: string | null;
+  avatar: string | null;
+  earned: number;
+  completed: number;
+  points: number;
+  rank: number;
+}
