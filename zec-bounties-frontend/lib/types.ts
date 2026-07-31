@@ -1,4 +1,4 @@
-export type UserRole = "ADMIN" | "CLIENT";
+export type UserRole = "ADMIN" | "CLIENT" | "TEAM" | "HUNTER";
 
 export type BountyStatus =
   | "TO_DO"

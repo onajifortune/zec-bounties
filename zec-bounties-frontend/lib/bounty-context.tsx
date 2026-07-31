@@ -87,6 +87,11 @@ interface BountyContextType {
     accountName: string,
   ) => Promise<RecoveryData>;
   nicknameUpdate: (nickname: string) => Promise<boolean | undefined>;
+  needsOnboarding: boolean;
+  completeOnboarding: (
+    role: "HUNTER" | "TEAM",
+    teamName?: string,
+  ) => Promise<{ success: boolean; error?: string; team?: Team }>;
 
   // Role switching (isRobin users only)
   switchRole: () => Promise<void>;
@@ -304,6 +309,7 @@ interface BountyContextType {
   ) => Promise<TeamWallet>;
   deleteTeamWallet: (teamId: string) => Promise<void>;
   currentTeam: Team | null;
+  myTeam: Team | null;
 }
 
 const BountyContext = createContext<BountyContextType | undefined>(undefined);
@@ -359,6 +365,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   );
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   // Helper function to get auth headers
   const getAuthHeaders = () => {
@@ -406,6 +413,43 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       throw error;
     } finally {
       setIsSwitchingRole(false);
+    }
+  };
+
+  const completeOnboarding = async (
+    role: "HUNTER" | "TEAM",
+    teamName?: string,
+  ): Promise<{ success: boolean; error?: string; team?: Team }> => {
+    if (!currentUser) return { success: false, error: "Not authenticated" };
+
+    try {
+      const res = await fetch(`${backendUrl}/api/onboarding/select-role`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ role, teamName }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || "Failed to select role" };
+      }
+
+      // Server issues a fresh token with the new role baked in — swap it in
+      // immediately so every subsequent request is authorized correctly,
+      // without forcing a logout/login round-trip.
+      localStorage.setItem("authToken", data.token);
+      localStorage.setItem("currentUser", JSON.stringify(data.user));
+      setCurrentUser(data.user);
+      setNeedsOnboarding(false);
+
+      if (data.team) {
+        setTeams((prev) => [data.team, ...prev]);
+      }
+
+      return { success: true, team: data.team };
+    } catch (error) {
+      console.error("Failed to complete onboarding:", error);
+      return { success: false, error: "Failed to select role" };
     }
   };
 
@@ -1163,7 +1207,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
 
       const data = await res.json();
       const nonAdminUsersData = data.filter(
-        (user: User) => user.role === "CLIENT",
+        (user: User) => user.role === "CLIENT" || user.role === "HUNTER",
       );
       setUsers(data);
       setNonAdminUsers(nonAdminUsersData);
@@ -1526,7 +1570,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   };
 
   const fetchTeams = async () => {
-    if (!currentUser || currentUser.role !== "ADMIN") return;
+    if (!currentUser) return;
     setTeamsLoading(true);
     try {
       const res = await fetch(`${backendUrl}/api/teams`, {
@@ -1547,8 +1591,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     name: string;
     description?: string;
   }): Promise<Team> => {
-    if (!currentUser || currentUser.role !== "ADMIN")
-      throw new Error("Unauthorized");
+    if (!currentUser) throw new Error("Unauthorized");
     const res = await fetch(`${backendUrl}/api/teams`, {
       method: "POST",
       headers: getAuthHeaders(),
@@ -1564,8 +1607,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     id: string,
     data: { name?: string; description?: string },
   ): Promise<Team> => {
-    if (!currentUser || currentUser.role !== "ADMIN")
-      throw new Error("Unauthorized");
+    if (!currentUser) throw new Error("Unauthorized");
     const res = await fetch(`${backendUrl}/api/teams/${id}`, {
       method: "PATCH",
       headers: getAuthHeaders(),
@@ -1578,8 +1620,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteTeam = async (id: string): Promise<void> => {
-    if (!currentUser || currentUser.role !== "ADMIN")
-      throw new Error("Unauthorized");
+    if (!currentUser) throw new Error("Unauthorized");
     const res = await fetch(`${backendUrl}/api/teams/${id}`, {
       method: "DELETE",
       headers: getAuthHeaders(),
@@ -1596,8 +1637,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     userIds: string[],
     role = "MEMBER",
   ): Promise<TeamMember[]> => {
-    if (!currentUser || currentUser.role !== "ADMIN")
-      throw new Error("Unauthorized");
+    if (!currentUser) throw new Error("Unauthorized");
     const res = await fetch(`${backendUrl}/api/teams/${teamId}/members`, {
       method: "POST",
       headers: getAuthHeaders(),
@@ -1626,8 +1666,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     userId: string,
     role: string,
   ): Promise<TeamMember> => {
-    if (!currentUser || currentUser.role !== "ADMIN")
-      throw new Error("Unauthorized");
+    if (!currentUser) throw new Error("Unauthorized");
     const res = await fetch(
       `${backendUrl}/api/teams/${teamId}/members/${userId}`,
       {
@@ -1658,8 +1697,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     teamId: string,
     userId: string,
   ): Promise<void> => {
-    if (!currentUser || currentUser.role !== "ADMIN")
-      throw new Error("Unauthorized");
+    if (!currentUser) throw new Error("Unauthorized");
     const res = await fetch(
       `${backendUrl}/api/teams/${teamId}/members/${userId}`,
       {
@@ -1684,8 +1722,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     teamId: string,
     data: { accountName: string; chain?: string; serverUrl?: string },
   ): Promise<TeamWallet> => {
-    if (!currentUser || currentUser.role !== "ADMIN")
-      throw new Error("Unauthorized");
+    if (!currentUser) throw new Error("Unauthorized");
     const res = await fetch(`${backendUrl}/api/teams/${teamId}/wallet`, {
       method: "POST",
       headers: getAuthHeaders(),
@@ -1709,8 +1746,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       birthdayHeight?: number;
     },
   ): Promise<TeamWallet> => {
-    if (!currentUser || currentUser.role !== "ADMIN")
-      throw new Error("Unauthorized");
+    if (!currentUser) throw new Error("Unauthorized");
     const res = await fetch(`${backendUrl}/api/teams/${teamId}/wallet/import`, {
       method: "POST",
       headers: getAuthHeaders(),
@@ -1725,8 +1761,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteTeamWallet = async (teamId: string): Promise<void> => {
-    if (!currentUser || currentUser.role !== "ADMIN")
-      throw new Error("Unauthorized");
+    if (!currentUser) throw new Error("Unauthorized");
     const res = await fetch(`${backendUrl}/api/teams/${teamId}/wallet`, {
       method: "DELETE",
       headers: getAuthHeaders(),
@@ -1747,6 +1782,13 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   const currentTeam: Team | null =
     activeWallet?.isTeam && activeWallet.teamId
       ? (teams.find((t) => t.id === activeWallet.teamId) ?? null)
+      : null;
+
+  const myTeam: Team | null =
+    currentUser?.role === "TEAM"
+      ? (teams.find((t) =>
+          t.members.some((m) => m.userId === currentUser.id),
+        ) ?? null)
       : null;
 
   // Initialize auth and fetch PUBLIC data
@@ -1772,6 +1814,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
           const data = await res.json();
           setCurrentUser(data.user);
           localStorage.setItem("currentUser", JSON.stringify(data.user));
+          setNeedsOnboarding(data.user.roleSelectedAt === null);
         } catch (error) {
           console.error("Token validation failed:", error);
           localStorage.removeItem("authToken");
@@ -1793,8 +1836,10 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       fetchAllUsersApplications();
       fetchUserSubmissions();
       fetchZcashParams();
-      if (currentUser.role === "ADMIN") {
+      if (currentUser.role === "ADMIN" || currentUser.role === "TEAM") {
         fetchTeams();
+      }
+      if (currentUser.role === "ADMIN") {
         fetchAllSubmissions().then(setAllSubmissions);
       }
     } else {
@@ -2432,6 +2477,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem("currentUser", JSON.stringify(data.user));
 
       setCurrentUser(data.user);
+      setNeedsOnboarding(data.user.roleSelectedAt === null);
 
       await Promise.all([
         fetchBounties(),
@@ -2815,6 +2861,9 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         importTeamWallet,
         deleteTeamWallet,
         currentTeam,
+        myTeam,
+        needsOnboarding,
+        completeOnboarding,
       }}
     >
       {children}
