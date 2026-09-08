@@ -156,6 +156,7 @@ interface BountyContextType {
   verifyUaddress: (z_address: string) => Promise<boolean | undefined>;
   fetchBounties: (reset?: boolean) => Promise<void>;
   loadMoreBounties: () => Promise<void>;
+  loadAllBounties: () => Promise<void>;
   hasMoreBounties: boolean;
   bountiesPage: number;
   myBounties: Bounty[];
@@ -2537,6 +2538,56 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     await fetchBounties(false);
   };
 
+  /** Fetches every page (limit 50, backend cap) and replaces the list. */
+  const loadAllBounties = async () => {
+    if (bountiesLoading) return;
+    setBountiesLoading(true);
+    try {
+      const resolvedChain =
+        currentUser?.role === "ADMIN" ? "ALL" : "MAIN";
+      const limit = 50;
+      const collected: Bounty[] = [];
+      let page = 1;
+
+      while (true) {
+        const params = new URLSearchParams({
+          page: String(page),
+          limit: String(limit),
+          chain: resolvedChain,
+        });
+        const res = await fetch(`${backendUrl}/api/bounties?${params}`, {
+          headers: getAuthHeaders(),
+        });
+        if (!res.ok) throw new Error("Failed to fetch bounties");
+
+        const data = await res.json();
+        const incoming: Bounty[] = Array.isArray(data)
+          ? data
+          : (data.data ?? []);
+        const total: number = data.total ?? incoming.length;
+        const seen = new Set(collected.map((b) => b.id));
+        collected.push(...incoming.filter((b) => !seen.has(b.id)));
+
+        if (
+          incoming.length === 0 ||
+          collected.length >= total ||
+          incoming.length < limit
+        ) {
+          break;
+        }
+        page += 1;
+      }
+
+      setBounties(collected);
+      setBountiesPage(page + 1);
+      setHasMoreBounties(false);
+    } catch (error) {
+      console.error("Failed to fetch all bounties:", error);
+    } finally {
+      setBountiesLoading(false);
+    }
+  };
+
   const fetchMyBounties = async () => {
     if (!currentUser) return;
     setMyBountiesLoading(true);
@@ -3352,6 +3403,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         deleteBounty,
         fetchBounties,
         loadMoreBounties,
+        loadAllBounties,
         hasMoreBounties,
         bountiesPage,
         totalBountyAmount,

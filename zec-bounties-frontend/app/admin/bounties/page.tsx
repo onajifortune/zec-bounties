@@ -18,6 +18,13 @@ import {
   X,
   Loader2,
 } from "lucide-react";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { AdminBountyModal } from "@/components/admin-bounty-modal";
 import { BountyDetailModal } from "@/components/bounty-detail-modal";
@@ -29,7 +36,6 @@ import { ProtectedRoute } from "@/components/auth/protected-route";
 import { Input } from "@/components/ui/input";
 import { WalletGuard } from "@/components/settings/wallet-guard";
 
-// Windows 98-style defrag map colors (inspired by classic Disk Defragmenter)
 const DEFRAG_STATUS_COLORS: Record<BountyStatus, string> = {
   TO_DO: "bg-cyan-400",
   IN_PROGRESS: "bg-blue-800",
@@ -61,6 +67,7 @@ export default function MarketplacePage() {
     bountiesLoading,
     hasMoreBounties,
     loadMoreBounties,
+    loadAllBounties,
     currentUser,
     categories,
     createCategory,
@@ -78,13 +85,12 @@ export default function MarketplacePage() {
   const [isAdminBountyModalOpen, setIsAdminBountyModalOpen] = useState(false);
   const [selectedBounty, setSelectedBounty] = useState<Bounty | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [defragListOpen, setDefragListOpen] = useState(false);
 
-  // New states for category creation
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [categoryError, setCategoryError] = useState("");
 
-  // Open a bounty and reflect it in the URL
   const openBounty = (bounty: Bounty) => {
     setSelectedBounty(bounty);
     setIsDetailModalOpen(true);
@@ -93,13 +99,12 @@ export default function MarketplacePage() {
 
   const closeBounty = () => {
     setIsDetailModalOpen(false);
-    router.push(pathname, { scroll: false }); // strips the query param
+    router.push(pathname, { scroll: false });
   };
 
   const handleAddCategory = async () => {
     if (newCategoryName.trim() === "") return;
 
-    // Check if category already exists
     if (categories.some((cat) => cat.name === newCategoryName.trim())) {
       setCategoryError("Category already exists!");
       return;
@@ -124,20 +129,17 @@ export default function MarketplacePage() {
     setCategoryError("");
   };
 
-  // Convert categories to display format (add "All" option)
   const displayCategories = ["All", ...categories.map((cat) => cat.name)];
 
   const filteredBounties = useMemo(() => {
     let filtered = bounties;
 
-    // Category filter
     if (activeCategory !== "All") {
       filtered = filtered.filter(
         (bounty) => bounty.categoryId === activeCategory,
       );
     }
 
-    // Search filter
     if (searchQuery.trim()) {
       const searchLower = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -148,7 +150,6 @@ export default function MarketplacePage() {
       );
     }
 
-    // Status filter
     if (statusFilter !== "all") {
       filtered = filtered.filter((bounty) => bounty.status === statusFilter);
     }
@@ -159,7 +160,6 @@ export default function MarketplacePage() {
     );
   }, [bounties, searchQuery, activeCategory, statusFilter]);
 
-  // Order for defrag map so same-status blocks form contiguous runs
   const defragBounties = useMemo(() => {
     return [...filteredBounties].sort((a, b) => {
       const ai = STATUS_ORDER.indexOf(a.status);
@@ -171,7 +171,6 @@ export default function MarketplacePage() {
     });
   }, [filteredBounties]);
 
-  // Get count for each category
   const getCategoryCount = (categoryName: string) => {
     if (categoryName === "All") {
       return bounties.length;
@@ -180,12 +179,10 @@ export default function MarketplacePage() {
       .length;
   };
 
-  // On load / when the URL param changes, open the matching bounty
   useEffect(() => {
     const bountyId = searchParams.get("bounty");
     if (!bountyId) return;
 
-    // Prefer the copy already in the list (avoids a flash of stale data)
     const inMemory = bounties.find((b) => b.id === bountyId);
     if (inMemory) {
       setSelectedBounty(inMemory);
@@ -193,8 +190,6 @@ export default function MarketplacePage() {
       return;
     }
 
-    // Fall back to a direct fetch — handles deep links before bounties load,
-    // or bounties the current filtered list doesn't include
     fetchBountyById(bountyId).then((bounty) => {
       if (bounty) {
         setSelectedBounty(bounty);
@@ -239,7 +234,6 @@ export default function MarketplacePage() {
         />
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Sidebar filters */}
           <aside className="space-y-8">
             <div>
               <h3 className="text-sm font-semibold mb-4 flex items-center justify-between">
@@ -256,7 +250,6 @@ export default function MarketplacePage() {
                 </Button>
               </h3>
 
-              {/* Category input form */}
               {isAddingCategory && (
                 <div className="mb-3 p-2 border rounded-lg bg-card/50">
                   <div className="flex items-center gap-2 mb-2">
@@ -321,23 +314,8 @@ export default function MarketplacePage() {
                 ))}
               </div>
             </div>
-
-            <div className="rounded-xl border bg-card/30 p-4 border-dashed hidden">
-              <h4 className="font-semibold text-sm mb-2">Become a Partner</h4>
-              <p className="text-xs text-muted-foreground mb-4">
-                List your technical challenges and find top-tier developers.
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full text-xs bg-transparent"
-              >
-                Integrations Console
-              </Button>
-            </div>
           </aside>
 
-          {/* Main content */}
           <div className="lg:col-span-3 space-y-6">
             <div className="flex items-center justify-between pb-4 border-b">
               <h2 className="text-xl font-bold">
@@ -397,9 +375,88 @@ export default function MarketplacePage() {
                         <span>{item.label}</span>
                       </div>
                     ))}
-                    <span className="ml-auto text-[11px] opacity-70">
-                      {filteredBounties.length} bounties · click a block to open
-                    </span>
+                    <div className="ml-auto flex items-center gap-2">
+                      <span className="text-[11px] opacity-70">
+                        {filteredBounties.length} bounties · click a block to
+                        open
+                      </span>
+                      <Sheet
+                        open={defragListOpen}
+                        onOpenChange={setDefragListOpen}
+                      >
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="h-7 gap-1.5 px-2.5 text-xs"
+                          disabled={bountiesLoading}
+                          onClick={async () => {
+                            setDefragListOpen(true);
+                            await loadAllBounties();
+                          }}
+                        >
+                          {bountiesLoading ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <List className="h-3.5 w-3.5" />
+                          )}
+                          List all
+                        </Button>
+                        <SheetContent
+                          side="right"
+                          className="flex w-full flex-col sm:max-w-md"
+                        >
+                          <SheetHeader>
+                            <SheetTitle>
+                              {activeCategory === "All"
+                                ? "All bounties"
+                                : `${activeCategory} bounties`}
+                            </SheetTitle>
+                            <SheetDescription>
+                              {defragBounties.length} on the defrag map
+                              {hasMoreBounties ? " · loading the rest…" : ""}
+                            </SheetDescription>
+                          </SheetHeader>
+                          <div className="mt-4 flex-1 overflow-y-auto pr-1">
+                            <ul className="space-y-1">
+                              {defragBounties.map((bounty) => {
+                                const color =
+                                  DEFRAG_STATUS_COLORS[bounty.status] ??
+                                  "bg-zinc-600";
+                                return (
+                                  <li key={bounty.id}>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setDefragListOpen(false);
+                                        openBounty(bounty);
+                                      }}
+                                      className="flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left hover:bg-accent"
+                                    >
+                                      <span
+                                        className={`mt-1 inline-block h-3 w-3 shrink-0 border border-black/80 ${color}`}
+                                      />
+                                      <span className="min-w-0 flex-1">
+                                        <span className="block truncate text-sm font-medium">
+                                          {bounty.title}
+                                        </span>
+                                        <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                                          {formatStatus(bounty.status)}
+                                          {typeof bounty.bountyAmount ===
+                                          "number"
+                                            ? ` · ${bounty.bountyAmount} ZEC`
+                                            : ""}
+                                        </span>
+                                      </span>
+                                    </button>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        </SheetContent>
+                      </Sheet>
+                    </div>
                   </div>
                   <div
                     className="rounded border border-border bg-black p-1.5 overflow-hidden"
@@ -439,6 +496,12 @@ export default function MarketplacePage() {
                       })}
                     </div>
                   </div>
+                  {(hasMoreBounties || bountiesLoading) && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Loading remaining bounties…
+                    </div>
+                  )}
                 </div>
               )
             ) : filteredBounties.length > 0 ? (
@@ -468,7 +531,7 @@ export default function MarketplacePage() {
               </div>
             )}
 
-            {hasMoreBounties && (
+            {hasMoreBounties && viewMode !== "defrag" && (
               <div className="pt-8 flex justify-center">
                 <Button
                   variant="outline"
