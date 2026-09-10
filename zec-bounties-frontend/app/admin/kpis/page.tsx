@@ -12,14 +12,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ArrowUpDown, Zap, Users, Pencil } from "lucide-react";
 import {
-  ArrowUpDown,
-  Zap,
-  Users,
-  Pencil,
-} from "lucide-react";
-import { BadgeIcons, BadgeSvg, SpecialtyFilterChips, StarFilterChips, AssignableBadgeList } from "@/components/badges/badge-icons";
-import { UaReceiverIcons, UaFilterChips, matchesReceiverFilter, type UaReceiverKey } from "@/components/address/ua-receiver-icons";
+  BadgeIcons,
+  BadgeSvg,
+  SpecialtyFilterChips,
+  StarFilterChips,
+  AssignableBadgeList,
+} from "@/components/badges/badge-icons";
+import {
+  UaReceiverIcons,
+  UaFilterChips,
+  matchesReceiverFilter,
+  type UaReceiverKey,
+} from "@/components/address/ua-receiver-icons";
 import { getBadgeTooltip, matchesBadgeFilter } from "@/lib/badges";
 import {
   ResponsiveContainer,
@@ -151,7 +157,6 @@ export default function KpisDashboard() {
     setDefaultWallet,
   } = useBounty();
 
-
   const isAdmin = currentUser?.role === "ADMIN";
 
   const [viewMode, setViewMode] = useState<"public" | "admin">(
@@ -187,20 +192,20 @@ export default function KpisDashboard() {
   const [userFilter, setUserFilter] = useState("");
   // Dynamic default avatar color based on completed bounties
   const getDefaultAvatarClasses = (
-  completed: number,
-  badges: string[] = [],
-) => {
-  return "bg-muted text-muted-foreground";
-};
+    completed: number,
+    badges: string[] = [],
+  ) => {
+    return "bg-muted text-muted-foreground";
+  };
 
   // === Time Range Filter ===
   const [timeRange, setTimeRange] = useState<"30d" | "90d" | "all">("all");
 
-
   const [badgeFilter, setBadgeFilter] = useState<string[]>([]);
   const [receiverFilter, setReceiverFilter] = useState<UaReceiverKey[]>([]);
-  const [receiverMode, setReceiverMode] = useState<"all" | "any" | "exact">("all");
-
+  const [receiverMode, setReceiverMode] = useState<"all" | "any" | "exact">(
+    "all",
+  );
 
   const timeRangeConfig = {
     "30d": {
@@ -320,46 +325,46 @@ export default function KpisDashboard() {
         let data = await res.json();
 
         if (isAdmin) {
-	  data = data.map((user: any) => {
-	    if (user.UA_address) {
-	      try {
-		const decoded = getAddressReceivers(user.UA_address);
-		return {
-		  ...user,
-		  addressType: decoded.type,
-		  receivers: {
-		    ironwood: !!decoded.ironwood,
-		    sapling: !!decoded.sapling,
-		    transparent: !!decoded.transparent,
-		  },
-		};
-	      } catch {
-		return user;
-	      }
-	    }
-	    // Lone z-address is treated as Sapling-only (app disallows UA + z together)
-	    if (user.z_address) {
-	      return {
-		...user,
-		addressType: "Sapling",
-		receivers: {
-		  ironwood: false,
-		  sapling: true,
-		  transparent: false,
-		},
-	      };
-	    }
-	    return {
-	      ...user,
-	      addressType: user.addressType || "None",
-	      receivers: user.receivers || {
-		ironwood: false,
-		sapling: false,
-		transparent: false,
-	      },
-	    };
-	  });
-	}
+          data = data.map((user: any) => {
+            if (user.UA_address) {
+              try {
+                const decoded = getAddressReceivers(user.UA_address);
+                return {
+                  ...user,
+                  addressType: decoded.type,
+                  receivers: {
+                    ironwood: !!decoded.ironwood,
+                    sapling: !!decoded.sapling,
+                    transparent: !!decoded.transparent,
+                  },
+                };
+              } catch {
+                return user;
+              }
+            }
+            // Lone z-address is treated as Sapling-only (app disallows UA + z together)
+            if (user.z_address) {
+              return {
+                ...user,
+                addressType: "Sapling",
+                receivers: {
+                  ironwood: false,
+                  sapling: true,
+                  transparent: false,
+                },
+              };
+            }
+            return {
+              ...user,
+              addressType: user.addressType || "None",
+              receivers: user.receivers || {
+                ironwood: false,
+                sapling: false,
+                transparent: false,
+              },
+            };
+          });
+        }
         setTopContributors(data);
       } catch (error) {
         console.error(error);
@@ -464,8 +469,6 @@ export default function KpisDashboard() {
     });
   }, [topContributors, sortKey, sortDirection]);
 
-
-
   const displayedContributors = useMemo(() => {
     return sortedContributors.filter((u) => {
       if (!matchesBadgeFilter(badgeFilter, u)) return false;
@@ -476,7 +479,6 @@ export default function KpisDashboard() {
       );
     });
   }, [sortedContributors, badgeFilter, receiverFilter, receiverMode]);
-
 
   const totalBounties = useMemo(
     () => topContributors.reduce((sum, u) => sum + (u.submitted || 0), 0),
@@ -700,139 +702,159 @@ export default function KpisDashboard() {
               )}
 
               {/* Combined Filters Popover */}
-<div className="relative" ref={filtersRef}>
-  <Button
-    variant="outline"
-    size="sm"
-    onClick={() => setFiltersOpen(!filtersOpen)}
-    className="gap-2 text-muted-foreground font-normal"
-  >
-    <SlidersHorizontal className="w-3.5 h-3.5" />
-    {currentTimeConfig.label} · {chainLabel}
-  </Button>
-  {filtersOpen && (
-    <div className="absolute right-0 mt-2 w-56 rounded-lg border border-border bg-popover text-popover-foreground shadow-lg p-3 z-20">
-      {/* Time Range */}
-      <div className="mb-3">
-        <p className="text-xs text-muted-foreground mb-1.5 px-1">
-          Time Range
-        </p>
-        {(["30d", "90d", "all"] as const).map((opt) => (
-          <button
-            key={opt}
-            onClick={() => setTimeRange(opt)}
-            className="w-full flex items-center justify-between px-2 py-1.5 rounded text-sm hover:bg-muted"
-          >
-            {timeRangeConfig[opt].label}
-            {timeRange === opt && <Check className="w-3.5 h-3.5" />}
-          </button>
-        ))}
-      </div>
+              <div className="relative" ref={filtersRef}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFiltersOpen(!filtersOpen)}
+                  className="gap-2 text-muted-foreground font-normal"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  {currentTimeConfig.label} · {chainLabel}
+                </Button>
+                {filtersOpen && (
+                  <div className="absolute right-0 mt-2 w-56 rounded-lg border border-border bg-popover text-popover-foreground shadow-lg p-3 z-20">
+                    {/* Time Range */}
+                    <div className="mb-3">
+                      <p className="text-xs text-muted-foreground mb-1.5 px-1">
+                        Time Range
+                      </p>
+                      {(["30d", "90d", "all"] as const).map((opt) => (
+                        <button
+                          key={opt}
+                          onClick={() => setTimeRange(opt)}
+                          className="w-full flex items-center justify-between px-2 py-1.5 rounded text-sm hover:bg-muted"
+                        >
+                          {timeRangeConfig[opt].label}
+                          {timeRange === opt && (
+                            <Check className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
 
-      {/* Chain */}
-      <div className="border-t border-border pt-3">
-        <p className="text-xs text-muted-foreground mb-1.5 px-1">Chain</p>
-        {(
-          [
-            { key: "MAIN", label: "Mainnet" },
-            { key: "TEST", label: "Testnet" },
-            { key: "all", label: "Both" },
-          ] as const
-        ).map((opt) => (
-          <button
-            key={opt.key}
-            onClick={() => setChainFilter(opt.key as ChainFilter)}
-            className="w-full flex items-center justify-between px-2 py-1.5 rounded text-sm hover:bg-muted"
-          >
-            {opt.label}
-            {chainFilter === opt.key && <Check className="w-3.5 h-3.5" />}
-          </button>
-        ))}
-      </div>
+                    {/* Chain */}
+                    <div className="border-t border-border pt-3">
+                      <p className="text-xs text-muted-foreground mb-1.5 px-1">
+                        Chain
+                      </p>
+                      {(
+                        [
+                          { key: "MAIN", label: "Mainnet" },
+                          { key: "TEST", label: "Testnet" },
+                          { key: "all", label: "Both" },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.key}
+                          onClick={() => setChainFilter(opt.key as ChainFilter)}
+                          className="w-full flex items-center justify-between px-2 py-1.5 rounded text-sm hover:bg-muted"
+                        >
+                          {opt.label}
+                          {chainFilter === opt.key && (
+                            <Check className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
 
-      {/* Badges */}
-      <div className="border-t border-border pt-3">
-        <p className="text-xs text-muted-foreground mb-1.5 px-1">Badges</p>
-        <div className="px-1">
-          <SpecialtyFilterChips compact value={badgeFilter} onChange={setBadgeFilter} />
-        </div>
-      </div>
+                    {/* Badges */}
+                    <div className="border-t border-border pt-3">
+                      <p className="text-xs text-muted-foreground mb-1.5 px-1">
+                        Badges
+                      </p>
+                      <div className="px-1">
+                        <SpecialtyFilterChips
+                          compact
+                          value={badgeFilter}
+                          onChange={setBadgeFilter}
+                        />
+                      </div>
+                    </div>
 
-      {/* Stars — replaces old avatar color filter */}
-      <div className="border-t border-border pt-3">
-        <p className="text-xs text-muted-foreground mb-1.5 px-1">Stars</p>
-        <div className="px-1">
-          <StarFilterChips value={badgeFilter} onChange={setBadgeFilter} />
-        </div>
-      </div>
+                    {/* Stars — replaces old avatar color filter */}
+                    <div className="border-t border-border pt-3">
+                      <p className="text-xs text-muted-foreground mb-1.5 px-1">
+                        Stars
+                      </p>
+                      <div className="px-1">
+                        <StarFilterChips
+                          value={badgeFilter}
+                          onChange={setBadgeFilter}
+                        />
+                      </div>
+                    </div>
 
-      {/* UA receivers — admin KPI page only */}
-      <div className="border-t border-border pt-3">
-        <p className="text-xs text-muted-foreground mb-1.5 px-1">
-          UA receivers
-        </p>
-        <div className="px-1 mb-2">
-          <UaFilterChips value={receiverFilter} onChange={setReceiverFilter} />
-        </div>
-          <div className="flex gap-1 px-1">
-            <button
-              type="button"
-              onClick={() => setReceiverMode("all")}
-              className={`px-2 py-0.5 rounded text-xs border ${
-                receiverMode === "all"
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "hover:bg-muted border-border"
-              }`}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              onClick={() => setReceiverMode("any")}
-              className={`px-2 py-0.5 rounded text-xs border ${
-                receiverMode === "any"
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "hover:bg-muted border-border"
-              }`}
-            >
-              Any
-            </button>
-            <button
-              type="button"
-              onClick={() => setReceiverMode("exact")}
-              className={`px-2 py-0.5 rounded text-xs border ${
-                receiverMode === "exact"
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "hover:bg-muted border-border"
-              }`}
-            >
-              Exact
-            </button>
+                    {/* UA receivers — admin KPI page only */}
+                    <div className="border-t border-border pt-3">
+                      <p className="text-xs text-muted-foreground mb-1.5 px-1">
+                        UA receivers
+                      </p>
+                      <div className="px-1 mb-2">
+                        <UaFilterChips
+                          value={receiverFilter}
+                          onChange={setReceiverFilter}
+                        />
+                      </div>
+                      <div className="flex gap-1 px-1">
+                        <button
+                          type="button"
+                          onClick={() => setReceiverMode("all")}
+                          className={`px-2 py-0.5 rounded text-xs border ${
+                            receiverMode === "all"
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "hover:bg-muted border-border"
+                          }`}
+                        >
+                          All
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setReceiverMode("any")}
+                          className={`px-2 py-0.5 rounded text-xs border ${
+                            receiverMode === "any"
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "hover:bg-muted border-border"
+                          }`}
+                        >
+                          Any
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setReceiverMode("exact")}
+                          className={`px-2 py-0.5 rounded text-xs border ${
+                            receiverMode === "exact"
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "hover:bg-muted border-border"
+                          }`}
+                        >
+                          Exact
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Clear */}
+                    {(badgeFilter.length > 0 || receiverFilter.length > 0) && (
+                      <div className="border-t border-border pt-2 mt-1">
+                        <button
+                          type="button"
+                          className="w-full text-xs text-muted-foreground hover:text-foreground px-2 py-1"
+                          onClick={() => {
+                            setBadgeFilter([]);
+                            setReceiverFilter([]);
+                          }}
+                        >
+                          Clear filters
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-      </div>
-
-      {/* Clear */}
-      {(badgeFilter.length > 0 || receiverFilter.length > 0) && (
-        <div className="border-t border-border pt-2 mt-1">
-          <button
-            type="button"
-            className="w-full text-xs text-muted-foreground hover:text-foreground px-2 py-1"
-            onClick={() => {
-              setBadgeFilter([]);
-              setReceiverFilter([]);
-            }}
-          >
-            Clear filters
-          </button>
-        </div>
-      )}
-    </div>
-  )}
-</div>
-</div>
-</div>
           {/* Top Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
+          <div className="grid grid-cols-1 imd:grid-cols-4 xl:grid-cols-6 gap-4 mb-8">
             {[
               { label: "Total Bounties", value: totalBounties },
               {
@@ -921,51 +943,53 @@ export default function KpisDashboard() {
                         Submitted <ArrowUpDown className="inline w-4 h-4" />
                       </TableHead>
                       {/* Badges — public; edit control admin-only */}
-			<TableHead>
-			  <div className="flex items-center gap-2">
-			    <span>Badges</span>
-			    {isAdmin && viewMode === "admin" && (
-			      <button
-				onClick={() => {
-				  setSelectedUserForBadges(null);
-				  setSelectedBadges([]);
-				  setIsBadgeModalOpen(true);
-				}}
-				className="p-1 hover:bg-muted rounded transition-colors"
-				title="Manage User Badges"
-			      >
-				<Pencil className="w-4 h-4 text-muted-foreground hover:text-foreground" />
-			      </button>
-			    )}
-			  </div>
-			</TableHead>
-			{viewMode === "admin" && (
-			  <TableHead className="w-[7.5rem]">
-			    <span className="flex w-full justify-center">Address Type</span>
-			  </TableHead>
-			)}
-			{viewMode === "admin" && (
-			  <TableHead
-			    className="cursor-pointer"
-			    onClick={() => toggleSort("totalEarned")}
-			  >
-			    <span className="flex w-full items-center justify-end gap-1">
-			      Total ZEC Earned
-			      <ArrowUpDown className="w-4 h-4" />
-			    </span>
-			  </TableHead>
-			)}
-			{viewMode === "admin" && (
-			  <TableHead
-			    className="cursor-pointer"
-			    onClick={() => toggleSort("completionRate")}
-			  >
-			    <span className="flex w-full items-center justify-end gap-1">
-			      Completion %
-			      <ArrowUpDown className="w-4 h-4" />
-			    </span>
-			  </TableHead>
-			)}
+                      <TableHead>
+                        <div className="flex items-center gap-2">
+                          <span>Badges</span>
+                          {isAdmin && viewMode === "admin" && (
+                            <button
+                              onClick={() => {
+                                setSelectedUserForBadges(null);
+                                setSelectedBadges([]);
+                                setIsBadgeModalOpen(true);
+                              }}
+                              className="p-1 hover:bg-muted rounded transition-colors"
+                              title="Manage User Badges"
+                            >
+                              <Pencil className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                            </button>
+                          )}
+                        </div>
+                      </TableHead>
+                      {viewMode === "admin" && (
+                        <TableHead className="w-[7.5rem]">
+                          <span className="flex w-full justify-center">
+                            Address Type
+                          </span>
+                        </TableHead>
+                      )}
+                      {viewMode === "admin" && (
+                        <TableHead
+                          className="cursor-pointer"
+                          onClick={() => toggleSort("totalEarned")}
+                        >
+                          <span className="flex w-full items-center justify-end gap-1">
+                            Total ZEC Earned
+                            <ArrowUpDown className="w-4 h-4" />
+                          </span>
+                        </TableHead>
+                      )}
+                      {viewMode === "admin" && (
+                        <TableHead
+                          className="cursor-pointer"
+                          onClick={() => toggleSort("completionRate")}
+                        >
+                          <span className="flex w-full items-center justify-end gap-1">
+                            Completion %
+                            <ArrowUpDown className="w-4 h-4" />
+                          </span>
+                        </TableHead>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -996,7 +1020,7 @@ export default function KpisDashboard() {
                             {/* Avatar with hover tooltip */}
                             <TableCell>
                               <Link
-                               href={profileHref(user)}
+                                href={profileHref(user)}
                                 className="inline-block hover:opacity-80"
                                 title="View profile"
                               >
@@ -1023,7 +1047,11 @@ export default function KpisDashboard() {
                             {/* Badges — public */}
                             <TableCell>
                               <div className="flex items-center gap-1.5">
-                                <BadgeIcons completed={user.completed} badges={user.badges} role={user.role} />
+                                <BadgeIcons
+                                  completed={user.completed}
+                                  badges={user.badges}
+                                  role={user.role}
+                                />
                               </div>
                             </TableCell>
                             {viewMode === "admin" && (
@@ -1443,179 +1471,221 @@ export default function KpisDashboard() {
           )}
 
           {/* === Badge Management Modal === */}
-{isBadgeModalOpen && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-    <div className="w-full max-w-md rounded-xl bg-popover text-popover-foreground p-6 shadow-xl border border-border">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Manage User Badges</h2>
-        <button
-          onClick={closeBadgeModal}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          ✕
-        </button>
-      </div>
-
-      {/* User Selector - only show if no user is pre-selected */}
-      {!selectedUserForBadges && (
-        <div className="mb-4">
-          <label className="text-sm text-muted-foreground mb-1 block">
-            Select User
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Type to filter users..."
-              value={userFilter}
-              onChange={(e) => setUserFilter(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              autoFocus
-            />
-            <div className="mt-1 max-h-60 overflow-y-auto rounded-md border border-border bg-popover shadow-md">
-              {topContributors
-                .filter((u) =>
-                  u.name
-                    .toLowerCase()
-                    .includes(userFilter.toLowerCase().trim()),
-                )
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map((user) => (
+          {isBadgeModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+              <div className="w-full max-w-md max-h-[85vh] rounded-xl bg-popover text-popover-foreground shadow-xl border border-border flex flex-col">
+                <div className="flex items-center justify-between p-6 pb-4 flex-shrink-0">
+                  <h2 className="text-xl font-semibold">Manage User Badges</h2>
                   <button
-                    key={user.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedUserForBadges(user);
-                      setSelectedBadges(user.badges || []);
-                      setUserFilter("");
-                    }}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                    onClick={closeBadgeModal}
+                    className="text-muted-foreground hover:text-foreground"
                   >
-                    {user.name}
+                    ✕
                   </button>
-                ))}
-              {topContributors.filter((u) =>
-                u.name
-                  .toLowerCase()
-                  .includes(userFilter.toLowerCase().trim()),
-              ).length === 0 && (
-                <div className="px-3 py-2 text-sm text-muted-foreground">
-                  No users found
                 </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Show user name if already selected */}
-      {selectedUserForBadges && (
-        <div className="mb-4">
-          <p className="text-sm text-muted-foreground mb-1">User</p>
-          <div className="font-medium">
-            {selectedUserForBadges.name}
-          </div>
-        </div>
-      )}
+                {/* Scrollable body */}
+                <div className="flex-1 overflow-y-auto px-6">
+                  {/* User Selector - only show if no user is pre-selected */}
+                  {!selectedUserForBadges && (
+                    <div className="mb-4">
+                      <label className="text-sm text-muted-foreground mb-1 block">
+                        Select User
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Type to filter users..."
+                          value={userFilter}
+                          onChange={(e) => setUserFilter(e.target.value)}
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          autoFocus
+                        />
+                        <div className="mt-1 max-h-60 overflow-y-auto rounded-md border border-border bg-popover shadow-md">
+                          {topContributors
+                            .filter((u) =>
+                              u.name
+                                .toLowerCase()
+                                .includes(userFilter.toLowerCase().trim()),
+                            )
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map((user) => (
+                              <button
+                                key={user.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedUserForBadges(user);
+                                  setSelectedBadges(user.badges || []);
+                                  setUserFilter("");
+                                }}
+                                className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                              >
+                                {user.name}
+                              </button>
+                            ))}
+                          {topContributors.filter((u) =>
+                            u.name
+                              .toLowerCase()
+                              .includes(userFilter.toLowerCase().trim()),
+                          ).length === 0 && (
+                            <div className="px-3 py-2 text-sm text-muted-foreground">
+                              No users found
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
-      {/* Badges Multi-Select */}
-      {selectedUserForBadges && (
-        <div className="mb-6">
-          <p className="text-sm text-muted-foreground mb-2">Badges</p>
-          <AssignableBadgeList
-            selected={selectedBadges}
-            onToggle={toggleBadge}
-          />
-        </div>
-      )}
+                  {/* Show user name if already selected */}
+                  {selectedUserForBadges && (
+                    <div className="mb-4">
+                      <p className="text-sm text-muted-foreground mb-1">User</p>
+                      <div className="font-medium">
+                        {selectedUserForBadges.name}
+                      </div>
+                    </div>
+                  )}
 
-      {/* Avatar Color Override */}
-      {/* Star Override */}
-{selectedUserForBadges && (
-  <div className="mb-6 border-t border-border pt-4">
-    <p className="text-sm text-muted-foreground mb-3">
-      Star Override
-    </p>
-    <div className="space-y-1">
-      {[
-        { value: "avatar:default", label: "Default (based on completed bounties)", star: null },
-        { value: "avatar:1", label: "1 Task", star: "1-task" },
-        { value: "avatar:5", label: "5 Tasks", star: "5-tasks" },
-        { value: "avatar:10", label: "10 Tasks", star: "10-tasks" },
-        { value: "avatar:15", label: "15 Tasks", star: "15-tasks" },
-        { value: "avatar:25", label: "25 Tasks", star: "25-tasks" },
-        { value: "avatar:50", label: "50 Tasks", star: "50-tasks" },
-      ].map((option) => {
-        const isSelected =
-          selectedBadges.includes(option.value) ||
-          (option.value === "avatar:default" &&
-            !selectedBadges.some((b) => b.startsWith("avatar:")));
+                  {/* Badges Multi-Select */}
+                  {selectedUserForBadges && (
+                    <div className="mb-6">
+                      <p className="text-sm text-muted-foreground mb-2">
+                        Badges
+                      </p>
+                      <AssignableBadgeList
+                        selected={selectedBadges}
+                        onToggle={toggleBadge}
+                      />
+                    </div>
+                  )}
 
-        return (
-          <button
-            key={option.value}
-            onClick={() => {
-              const filtered = selectedBadges.filter(
-                (b) => !b.startsWith("avatar:"),
-              );
-              if (option.value !== "avatar:default") {
-                setSelectedBadges([...filtered, option.value]);
-              } else {
-                setSelectedBadges(filtered);
-              }
-            }}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-              isSelected
-                ? "bg-muted border border-primary"
-                : "hover:bg-muted/50 border border-transparent"
-            }`}
-          >
-            {option.star ? (
-              <BadgeSvg
-                badgeKey={option.star}
-                title={option.label}
-                className="w-5 h-5"
-              />
-            ) : (
-              <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center">
-                <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                  {/* Star Override */}
+                  {selectedUserForBadges && (
+                    <div className="mb-6 border-t border-border pt-4">
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Star Override
+                      </p>
+                      <div className="space-y-1">
+                        {[
+                          {
+                            value: "avatar:default",
+                            label: "Default (based on completed bounties)",
+                            star: null,
+                          },
+                          {
+                            value: "avatar:1",
+                            label: "1 Task",
+                            star: "1-task",
+                          },
+                          {
+                            value: "avatar:5",
+                            label: "5 Tasks",
+                            star: "5-tasks",
+                          },
+                          {
+                            value: "avatar:10",
+                            label: "10 Tasks",
+                            star: "10-tasks",
+                          },
+                          {
+                            value: "avatar:15",
+                            label: "15 Tasks",
+                            star: "15-tasks",
+                          },
+                          {
+                            value: "avatar:25",
+                            label: "25 Tasks",
+                            star: "25-tasks",
+                          },
+                          {
+                            value: "avatar:50",
+                            label: "50 Tasks",
+                            star: "50-tasks",
+                          },
+                        ].map((option) => {
+                          const isSelected =
+                            selectedBadges.includes(option.value) ||
+                            (option.value === "avatar:default" &&
+                              !selectedBadges.some((b) =>
+                                b.startsWith("avatar:"),
+                              ));
+
+                          return (
+                            <button
+                              key={option.value}
+                              onClick={() => {
+                                const filtered = selectedBadges.filter(
+                                  (b) => !b.startsWith("avatar:"),
+                                );
+                                if (option.value !== "avatar:default") {
+                                  setSelectedBadges([
+                                    ...filtered,
+                                    option.value,
+                                  ]);
+                                } else {
+                                  setSelectedBadges(filtered);
+                                }
+                              }}
+                              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                                isSelected
+                                  ? "bg-muted border border-primary"
+                                  : "hover:bg-muted/50 border border-transparent"
+                              }`}
+                            >
+                              {option.star ? (
+                                <BadgeSvg
+                                  badgeKey={option.star}
+                                  title={option.label}
+                                  className="w-5 h-5"
+                                />
+                              ) : (
+                                <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center">
+                                  <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                                </div>
+                              )}
+
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium">
+                                  {option.label}
+                                </div>
+                              </div>
+
+                              {isSelected && (
+                                <div className="text-primary text-sm flex-shrink-0">
+                                  ✓
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        This overrides the automatic star based on completed
+                        bounties.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-end gap-3 p-6 pt-4 flex-shrink-0 border-t border-border">
+                  <Button
+                    variant="outline"
+                    onClick={closeBadgeModal}
+                    disabled={isSavingBadges}
+                  >
+                    Cancel
+                  </Button>
+                  {selectedUserForBadges && (
+                    <Button onClick={saveUserBadges} disabled={isSavingBadges}>
+                      {isSavingBadges ? "Saving..." : "Save Changes"}
+                    </Button>
+                  )}
+                </div>
               </div>
-            )}
-
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium">{option.label}</div>
             </div>
-
-            {isSelected && (
-              <div className="text-primary text-sm flex-shrink-0">✓</div>
-            )}
-          </button>
-        );
-      })}
-    </div>
-    <p className="text-xs text-muted-foreground mt-2">
-      This overrides the automatic star based on completed bounties.
-    </p>
-  </div>
-)}
-
-      {/* Action Buttons */}
-      <div className="flex justify-end gap-3">
-        <Button
-          variant="outline"
-          onClick={closeBadgeModal}
-          disabled={isSavingBadges}
-        >
-          Cancel
-        </Button>
-        {selectedUserForBadges && (
-          <Button onClick={saveUserBadges} disabled={isSavingBadges}>
-            {isSavingBadges ? "Saving..." : "Save Changes"}
-          </Button>
-        )}
-      </div>
-    </div>
-  </div>
-)}
+          )}
         </div>
       </main>
     </ProtectedRoute>
