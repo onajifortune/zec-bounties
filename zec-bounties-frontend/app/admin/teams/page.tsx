@@ -71,6 +71,7 @@ import {
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { TeamBanner } from "@/components/teams/team-banner";
+import { CreateTeamPanel } from "@/components/teams/create-team-panel";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1532,7 +1533,7 @@ export default function AdminTeamsPage() {
           </div>
         </div>
 
-        <TeamFormModal
+        <CreateTeamPanel
           open={createOpen}
           onOpenChange={setCreateOpen}
           onSuccess={handleTeamCreated}
