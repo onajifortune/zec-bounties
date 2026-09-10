@@ -49,7 +49,6 @@ function coarseAddressType(user) {
   return "None";
 }
 
-
 function stripAmountsIfPrivate(rows, allowAmount) {
   if (!Array.isArray(rows)) return rows;
   if (allowAmount) return rows;
