@@ -116,6 +116,13 @@ interface BountyContextType {
   bounties: Bounty[];
   bountiesLoading: boolean;
   createBounty: (data: BountyFormData) => Promise<void>;
+  bountyQuota: {
+    limit: number | null;
+    used: number;
+    remaining: number | null;
+    resetsAt: string | null;
+  } | null;
+  fetchBountyQuota: () => Promise<void>;
   updateBounty: (
     id: string,
     data: Partial<BountyFormData> & {
@@ -468,6 +475,12 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
   const [teamSyncStatusError, setTeamSyncStatusError] = useState<string | null>(
     null,
   );
+  const [bountyQuota, setBountyQuota] = useState<{
+    limit: number;
+    used: number;
+    remaining: number;
+    resetsAt: string;
+  } | null>(null);
 
   // Helper function to get auth headers
   const getAuthHeaders = () => {
@@ -1988,6 +2001,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       fetchUsers();
       fetchTeams();
       fetchFavoriteTeams();
+      fetchBountyQuota();
       if (currentUser.role === "ADMIN") {
         fetchAllSubmissions().then(setAllSubmissions);
       }
@@ -2003,6 +2017,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
       setFavoriteTeamIds(new Set());
       setSyncStatus(null);
       setSyncStatusError(null);
+      setBountyQuota(null);
     }
   }, [currentUser]);
 
@@ -2714,6 +2729,24 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     return data.community ?? [];
   };
 
+  const fetchBountyQuota = async () => {
+    if (!currentUser) return;
+    if (currentUser.role === "ADMIN") {
+      setBountyQuota(null);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${backendUrl}/api/bounties/mine/quota`, {
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error("Failed to fetch bounty quota");
+      setBountyQuota(await res.json());
+    } catch (error) {
+      console.error("Failed to fetch bounty quota:", error);
+    }
+  };
+
   const createBounty = async (data: BountyFormData & { teamId?: string }) => {
     if (!currentUser) return;
 
@@ -2745,6 +2778,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
 
       const created = await res.json();
       setBounties((prev) => [created, ...prev]);
+      fetchBountyQuota();
     } catch (error) {
       console.error("Failed to create bounty:", error);
       throw error;
@@ -3383,6 +3417,8 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         bounties: populatedBounties,
         bountiesLoading,
         createBounty,
+        bountyQuota,
+        fetchBountyQuota,
         updateBounty,
         updateBountyStatus,
         approveBounty,
