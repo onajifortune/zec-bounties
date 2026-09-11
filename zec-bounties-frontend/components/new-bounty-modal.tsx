@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { useBounty } from "@/lib/bounty-context";
 import type { BountyFormData } from "@/lib/types";
-import { Loader2, Plus, Clock, Tag, AlignLeft, User } from "lucide-react";
+import { Loader2, Plus, Clock, Tag, AlignLeft } from "lucide-react";
 import { SiZcash } from "react-icons/si";
 import { toast } from "sonner";
 import { toDateInputValue, parseDateInputValue } from "@/lib/utils";
@@ -43,7 +43,6 @@ export function NewBountyModal({
 }: CreateBountyFormProps) {
   const {
     createBounty,
-    nonAdminUsers,
     currentUser,
     categories,
     bountyQuota,
@@ -53,7 +52,6 @@ export function NewBountyModal({
   const [formData, setFormData] = useState({
     title: "",
     description: "",
-    assignee: "none",
     bountyAmount: 0,
     timeToComplete: new Date(),
     category: "",
@@ -67,8 +65,6 @@ export function NewBountyModal({
   const isAdmin = currentUser?.role === "ADMIN";
   const atLimit =
     !isAdmin && bountyQuota?.remaining !== null && bountyQuota?.remaining === 0;
-
-  const availableUsers = nonAdminUsers;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,7 +116,6 @@ export function NewBountyModal({
       setFormData({
         title: "",
         description: "",
-        assignee: "none",
         bountyAmount: 0,
         timeToComplete: new Date(),
         category: "",
@@ -259,53 +254,23 @@ export function NewBountyModal({
               </div>
             </div>
 
-            {/* Deadline + Assignee */}
-            <div className="grid grid-cols-1 gap-5 imd:grid-cols-2">
-              <div className="space-y-2">
-                <Label
-                  htmlFor="date"
-                  className="flex items-center gap-2 text-sm font-medium"
-                >
-                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                  Time to Complete
-                </Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={toDateInputValue(formData.timeToComplete)}
-                  onChange={handleDateChange}
-                  required
-                  className="h-11 rounded-xl"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label
-                  htmlFor="assignee"
-                  className="flex items-center gap-2 text-sm font-medium"
-                >
-                  <User className="h-3.5 w-3.5 text-muted-foreground" />
-                  Assignee
-                </Label>
-                <Select
-                  value={formData.assignee}
-                  onValueChange={(value) =>
-                    setFormData((prev) => ({ ...prev, assignee: value }))
-                  }
-                >
-                  <SelectTrigger id="assignee" className="h-11 rounded-xl">
-                    <SelectValue placeholder="Optional: assign someone" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Unassigned</SelectItem>
-                    {availableUsers.map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
-                        {user.name || user.email}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            {/* Deadline */}
+            <div className="space-y-2">
+              <Label
+                htmlFor="date"
+                className="flex items-center gap-2 text-sm font-medium"
+              >
+                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                Time to Complete
+              </Label>
+              <Input
+                id="date"
+                type="date"
+                value={toDateInputValue(formData.timeToComplete)}
+                onChange={handleDateChange}
+                required
+                className="h-11 rounded-xl"
+              />
             </div>
 
             {/* Description */}
