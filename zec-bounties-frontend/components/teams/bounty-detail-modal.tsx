@@ -113,7 +113,7 @@ export function BountyDetailModal({
     (bounty.assignees?.some((a) => a.userId === currentUser.id) ||
       bounty.assignee === currentUser.id);
 
-  const isSuggestedTask = bounty.createdByUser?.role === "CLIENT";
+  const isSuggestedTask = bounty.createdByUser?.role === "HUNTER";
 
   const isMissingUAForMainnet =
     bounty.chain === "MAIN" && !currentUser?.UA_address;

@@ -699,7 +699,7 @@ export function BountyAdminCard({
                       <SelectContent>
                         <SelectItem value="none">No Assignee</SelectItem>
                         {users
-                          .filter((u) => u.role === "CLIENT")
+                          .filter((u) => u.role === "HUNTER")
                           .map((user) => (
                             <SelectItem key={user.id} value={user.id}>
                               {user.name}
@@ -1397,7 +1397,7 @@ export function BountyAdminCard({
                             <SelectContent>
                               <SelectItem value="none">No Assignee</SelectItem>
                               {users
-                                .filter((u) => u.role === "CLIENT")
+                                .filter((u) => u.role === "HUNTER")
                                 .map((user) => (
                                   <SelectItem key={user.id} value={user.id}>
                                     {user.name}
@@ -1499,7 +1499,9 @@ export function BountyAdminCard({
                       <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
                       <div>
                         <div className="font-semibold text-green-800 dark:text-green-200">
-                          {bounty.isPaid ? "Payment Sent" : "Payment Authorized"}
+                          {bounty.isPaid
+                            ? "Payment Sent"
+                            : "Payment Authorized"}
                         </div>
                         <div className="text-sm text-green-600 dark:text-green-400 font-mono">
                           {bounty.paymentTxId
