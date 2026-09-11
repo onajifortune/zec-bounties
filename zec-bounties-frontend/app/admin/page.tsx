@@ -361,9 +361,9 @@ export default function AdminDashboard() {
     if (assigneeCount === 0) {
       const createdByUser = bounty.createdByUser;
       const hasLegacyAssignee = !!bounty.assigneeUser;
-      const createdByClient = createdByUser?.role === "CLIENT";
+      const createdByHunter = createdByUser?.role === "HUNTER";
 
-      if (hasLegacyAssignee && createdByClient) {
+      if (hasLegacyAssignee && createdByHunter) {
         try {
           await updateBountyStatus(bountyId, "DONE");
         } catch (err) {
@@ -510,7 +510,7 @@ export default function AdminDashboard() {
 
   const totalRewards = totalBountyAmount;
   const activeBountiesAmount = totalActiveCount;
-  const totalHunters = nonAdminUsers.filter((u) => u.role === "CLIENT").length;
+  const totalHunters = nonAdminUsers.filter((u) => u.role === "HUNTER").length;
   const completedBounties = bounties.filter(
     (b) => b.status === "DONE" && !b.isPaid,
   );
