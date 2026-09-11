@@ -101,7 +101,7 @@ export function BountyCard({
     !userApplication &&
     !isAssignedToCurrentUser;
 
-  const isSuggestedTask = bounty.createdByUser?.role === "CLIENT";
+  const isSuggestedTask = bounty.createdByUser?.role === "HUNTER";
 
   const hasApplied = !!userApplication;
 
@@ -232,7 +232,7 @@ export function BountyCard({
                 <Badge
                   variant="outline"
                   className="text-[10px] h-4 px-1.5 border-sky-500/40 text-sky-600 bg-sky-500/5 gap-1"
-                  title="Suggested by a client — no other applicants permitted"
+                  title="Suggested by a hunter — no other applicants permitted"
                 >
                   <Lock className="h-2.5 w-2.5" /> Suggested
                 </Badge>
@@ -399,7 +399,7 @@ export function BountyCard({
           {isSuggestedTask && (
             <span
               className="imd:hidden absolute -top-2 -left-2 z-10 inline-flex items-center gap-0.5 text-[9px] font-bold px-1 py-1 rounded-full bg-sky-500 text-white border-2 border-background shadow-sm"
-              title="Suggested by a client — no other applicants permitted"
+              title="Suggested by a hunter — no other applicants permitted"
             >
               <Lock className="h-2.5 w-2.5" />
             </span>
@@ -421,7 +421,7 @@ export function BountyCard({
                   <Badge
                     variant="outline"
                     className="hidden imd:inline-flex text-[9px] h-4 px-1 border-sky-500/40 text-sky-600 bg-sky-500/5 gap-0.5 shrink-0"
-                    title="Suggested by a client — no other applicants permitted"
+                    title="Suggested by a hunter — no other applicants permitted"
                   >
                     <Lock className="h-2.5 w-2.5" /> Suggested
                   </Badge>
@@ -674,7 +674,7 @@ export function BountyCard({
               <Badge
                 variant="outline"
                 className="text-[10px] h-5 uppercase tracking-wider border-sky-500/50 text-sky-600 bg-sky-500/5 gap-1"
-                title="Suggested by a client — no other applicants permitted"
+                title="Suggested by a hunter — no other applicants permitted"
               >
                 <Lock className="h-3 w-3" /> Suggested
               </Badge>

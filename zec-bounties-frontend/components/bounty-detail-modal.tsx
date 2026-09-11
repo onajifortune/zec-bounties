@@ -130,7 +130,7 @@ export function BountyDetailModal({
     (bounty.assignees?.some((a) => a.userId === currentUser.id) ||
       bounty.assignee === currentUser.id);
 
-  const isSuggestedTask = bounty.createdByUser?.role === "CLIENT";
+  const isSuggestedTask = bounty.createdByUser?.role === "HUNTER";
 
   const canViewPrivate =
     !bounty.isPrivate ||
