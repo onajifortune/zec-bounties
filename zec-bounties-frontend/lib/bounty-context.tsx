@@ -291,6 +291,9 @@ interface BountyContextType {
 
   fetchExportPayments: (from?: string, to?: string) => Promise<any[]>;
   fetchExportCompleted: () => Promise<any[]>;
+  markBountiesExported: (
+    bountyIds: string[],
+  ) => Promise<{ exportedAt: string }>;
   updateUserOfac: (userId: string, ofacVerified: boolean) => Promise<void>;
 
   // Teams
@@ -2261,6 +2264,10 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
             fetchBalance();
             break;
 
+          case "bounties_exported":
+            fetchTotalStats();
+            break;
+
           case "bounty_assignees_updated":
             fetchBounties();
             break;
@@ -2558,8 +2565,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     if (bountiesLoading) return;
     setBountiesLoading(true);
     try {
-      const resolvedChain =
-        currentUser?.role === "ADMIN" ? "ALL" : "MAIN";
+      const resolvedChain = currentUser?.role === "ADMIN" ? "ALL" : "MAIN";
       const limit = 50;
       const collected: Bounty[] = [];
       let page = 1;
@@ -3172,6 +3178,28 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const markBountiesExported = async (
+    bountyIds: string[],
+  ): Promise<{ exportedAt: string }> => {
+    if (!currentUser || currentUser.role !== "ADMIN") {
+      throw new Error("Unauthorized");
+    }
+    const res = await fetch(
+      `${backendUrl}/api/bounties/export-completed/mark-exported`,
+      {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ bountyIds }),
+      },
+    );
+    const json = await res.json();
+    if (!res.ok) {
+      throw new Error(json.error || "Failed to mark bounties exported");
+    }
+    await fetchTotalStats();
+    return { exportedAt: json.exportedAt };
+  };
+
   const updateUserOfac = async (
     userId: string,
     ofacVerified: boolean,
@@ -3501,6 +3529,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         setDefaultWallet,
         fetchExportPayments,
         fetchExportCompleted,
+        markBountiesExported,
         updateUserOfac,
         teams,
         teamsLoading,
