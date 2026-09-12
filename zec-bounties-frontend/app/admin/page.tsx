@@ -276,6 +276,7 @@ export default function AdminDashboard() {
   const [showCancelledBounties, setShowCancelledBounties] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [txSubTab, setTxSubTab] = useState<"payouts" | "wallet">("wallet");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Filtered bounties for the table
   const chainFilteredBounties = useMemo(
@@ -297,12 +298,22 @@ export default function AdminDashboard() {
       result = result.filter((b) => b.categoryId === categoryFilter);
     }
 
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (b) =>
+          b.title.toLowerCase().includes(q) ||
+          b.createdByUser?.name?.toLowerCase().includes(q),
+      );
+    }
+
     return result;
   }, [
     chainFilteredBounties,
     bountyStatusFilter,
     showCancelledBounties,
     categoryFilter,
+    searchQuery,
   ]);
 
   const activeCategoryLabel =
@@ -543,7 +554,11 @@ export default function AdminDashboard() {
   return (
     <ProtectedRoute>
       <main className="min-h-screen bg-background">
-        <AdminNavbar isAdmin={true} />
+        <AdminNavbar
+          isAdmin={true}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+        />
 
         {/* ---------------------------------------------------------- */}
         {/* Sticky command bar: identity + environment + primary action */}
