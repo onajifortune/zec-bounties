@@ -466,6 +466,8 @@ export function AdminNavbar({
   searchQuery?: string;
   onSearchChange?: (value: string) => void;
 }) {
+  const searchEnabled = !!onSearchChange;
+
   const { theme, setTheme } = useTheme();
   const [topupOpen, setTopupOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -636,16 +638,18 @@ export function AdminNavbar({
               by dividers, so no single group's content can grow and push on
               its neighbours. */}
           <div className="hidden xl:flex items-center ml-auto">
-            <div className="relative w-[160px] 2xl:w-[220px] mr-2">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search bounties..."
-                value={searchQuery}
-                onChange={(e) => onSearchChange?.(e.target.value)}
-                className="pl-8 h-9 w-full bg-muted/50 border-none focus-visible:ring-1"
-              />
-            </div>
+            {searchEnabled && (
+              <div className="relative w-[160px] 2xl:w-[220px] mr-2">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search bounties..."
+                  value={searchQuery}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                  className="pl-8 h-9 w-full bg-muted/50 border-none focus-visible:ring-1"
+                />
+              </div>
+            )}
 
             <TooltipProvider delayDuration={300}>
               <NavDivider />
@@ -830,16 +834,18 @@ export function AdminNavbar({
                   <SheetTitle>Admin Menu</SheetTitle>
                 </SheetHeader>
                 <div className="flex flex-col gap-4 mt-6">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      type="search"
-                      placeholder="Search bounties..."
-                      value={searchQuery}
-                      onChange={(e) => onSearchChange?.(e.target.value)}
-                      className="pl-8 bg-muted/50 border-none focus-visible:ring-1"
-                    />
-                  </div>
+                  {searchEnabled && (
+                    <div className="relative w-[160px] 2xl:w-[220px] mr-2">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="search"
+                        placeholder="Search bounties..."
+                        value={searchQuery}
+                        onChange={(e) => onSearchChange(e.target.value)}
+                        className="pl-8 h-9 w-full bg-muted/50 border-none focus-visible:ring-1"
+                      />
+                    </div>
+                  )}
 
                   {activeWallet && (
                     <div
