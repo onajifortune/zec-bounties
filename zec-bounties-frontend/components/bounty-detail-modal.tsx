@@ -60,6 +60,7 @@ export function BountyDetailModal({
   } = useBounty();
 
   const [applicationMessage, setApplicationMessage] = useState("");
+  const [discordUsername, setDiscordUsername] = useState("");
   const [isApplying, setIsApplying] = useState(false);
   const [submissionDescription, setSubmissionDescription] = useState("");
   const [deliverableUrl, setDeliverableUrl] = useState("");
@@ -299,8 +300,9 @@ export function BountyDetailModal({
     if (!applicationMessage.trim()) return;
     setIsApplying(true);
     try {
-      await applyToBounty(bounty.id, applicationMessage);
+      await applyToBounty(bounty.id, applicationMessage, discordUsername);
       setApplicationMessage("");
+      setDiscordUsername("");
       toast.success("Application submitted successfully!");
     } catch (error) {
       console.error("Failed to apply:", error);
@@ -343,6 +345,7 @@ export function BountyDetailModal({
   const handleClose = () => {
     onOpenChange(false);
     setApplicationMessage("");
+    setDiscordUsername("");
     setSubmissionDescription("");
     setDeliverableUrl("");
     setWorkSubmissions([]);
@@ -634,6 +637,20 @@ export function BountyDetailModal({
                       value={applicationMessage}
                       onChange={(e) => setApplicationMessage(e.target.value)}
                       className="min-h-[90px] text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="discord-username" className="text-xs">
+                      Discord Username
+                    </Label>
+                    <input
+                      id="discord-username"
+                      type="text"
+                      placeholder="e.g. fortune#1234 or fortune.dev"
+                      value={discordUsername}
+                      onChange={(e) => setDiscordUsername(e.target.value)}
+                      className="w-full px-3 py-1.5 border rounded-md text-sm"
+                      autoComplete="off"
                     />
                   </div>
                   <div className="flex gap-2">

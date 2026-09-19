@@ -176,7 +176,11 @@ interface BountyContextType {
   unpaidDoneCount: number;
   fetchBountyById: (id: string) => Promise<Bounty | null>;
   fetchTransactionHashes: () => Promise<void>;
-  applyToBounty: (bountyId: string, message: string) => Promise<void>;
+  applyToBounty: (
+    bountyId: string,
+    message: string,
+    discordUsername?: string,
+  ) => Promise<void>;
   editBounty: (id: string, data: Partial<BountyFormData>) => void;
 
   // Zcash Params
@@ -3093,7 +3097,11 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     fetchUsers();
   };
 
-  const applyToBounty = async (bountyId: string, message: string) => {
+  const applyToBounty = async (
+    bountyId: string,
+    message: string,
+    discordUsername?: string,
+  ) => {
     if (!currentUser) return;
 
     try {
@@ -3104,6 +3112,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
           bountyId,
           applicantId: currentUser.id,
           message,
+          discordUsername,
         }),
       });
 
