@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useBounty } from "@/lib/bounty-context";
+import type { Team, Bounty } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -14,7 +15,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AlertTriangle, CheckCircle2, Coins, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import type { Bounty, Team } from "@/lib/types";
 
 export function TeamAuthorizePaymentPanel({
   team,
@@ -23,14 +23,20 @@ export function TeamAuthorizePaymentPanel({
   team: Team;
   teamBounties: Bounty[];
 }) {
-  const { authorizeTeamDuePayment } = useBounty();
+  const {
+    authorizeTeamDuePayment,
+    fetchTeamBounties,
+    loadMoreTeamBounties,
+    teamBountiesHasMore,
+    teamBountiesLoading,
+  } = useBounty();
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  // Same stable-key-per-selection pattern as the admin panel, so a double
-  // submit of the same payout is caught by the backend's replay guard.
+  // One idempotency key per selection, stable across retries so a double
+  // submit of the same payout is caught by the backend.
   const attemptKey = useRef<{ fingerprint: string; key: string } | null>(null);
   const keyForSelection = (ids: string[]) => {
     const fingerprint = [...ids].sort().join(",");
@@ -46,15 +52,26 @@ export function TeamAuthorizePaymentPanel({
     return attemptKey.current.key;
   };
 
-  const walletChainToBountyChain = (
-    walletChain?: string,
-  ): "TEST" | "MAIN" | null => {
-    if (walletChain === "testnet") return "TEST";
-    if (walletChain === "mainnet") return "MAIN";
-    return null;
-  };
+  const wallet = team.wallet;
+  const activeChain: "TEST" | "MAIN" | null =
+    wallet?.chain === "testnet"
+      ? "TEST"
+      : wallet?.chain === "mainnet"
+        ? "MAIN"
+        : null;
+  const isTestnetWallet = activeChain === "TEST";
 
-  const activeChain = walletChainToBountyChain(team.wallet?.chain);
+  console.table(
+    teamBounties.map((b) => ({
+      title: b.title.slice(0, 24),
+      status: b.status,
+      chain: b.chain,
+      isApproved: b.isApproved,
+      isPaid: b.isPaid,
+      inFlight: b.paymentInFlight,
+    })),
+  );
+  console.log("wallet chain:", wallet?.chain, "→ activeChain:", activeChain);
 
   const eligibleBounties = teamBounties.filter(
     (b) =>
@@ -74,9 +91,13 @@ export function TeamAuthorizePaymentPanel({
       b.chain !== activeChain,
   );
 
+  // Sends the backend couldn't confirm — locked until resolved.
   const inFlightBounties = teamBounties.filter(
     (b) => b.status === "DONE" && !b.isPaid && b.paymentInFlight,
   );
+
+  const hasMore = teamBountiesHasMore[team.id] ?? false;
+  const loadingMore = teamBountiesLoading[team.id] ?? false;
 
   const toggleOne = (id: string) => {
     setSelectedIds((prev) => {
@@ -87,21 +108,25 @@ export function TeamAuthorizePaymentPanel({
   };
 
   const toggleAll = () => {
-    if (selectedIds.size === eligibleBounties.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(eligibleBounties.map((b) => b.id)));
-    }
+    setSelectedIds(
+      selectedIds.size === eligibleBounties.length
+        ? new Set()
+        : new Set(eligibleBounties.map((b) => b.id)),
+    );
   };
 
-  const totalSelected = teamBounties
-    .filter((b) => selectedIds.has(b.id))
-    .reduce((sum, b) => sum + b.bountyAmount, 0);
+  const selectedBounties = eligibleBounties.filter((b) =>
+    selectedIds.has(b.id),
+  );
+  const totalSelected = selectedBounties.reduce(
+    (sum, b) => sum + b.bountyAmount,
+    0,
+  );
 
   const handleConfirmAuthorize = async () => {
     setShowConfirm(false);
     setIsProcessing(true);
-    const ids = Array.from(selectedIds);
+    const ids = selectedBounties.map((b) => b.id);
     try {
       const result = await authorizeTeamDuePayment(
         team.id,
@@ -128,47 +153,62 @@ export function TeamAuthorizePaymentPanel({
         rest.join(": ") || error.message || "Failed to authorize payment";
       toast.error(title || "Payment failed", { description, duration: 8000 });
     } finally {
+      // authorizeTeamDuePayment refreshes the global feed, not this team's
+      // list, so refresh it here (success or a locked-in-flight failure).
+      fetchTeamBounties(team.id);
       setIsProcessing(false);
     }
   };
 
-  const hasEligible = eligibleBounties.length > 0;
-  const hasActivity =
-    hasEligible || blockedBounties.length > 0 || inFlightBounties.length > 0;
+  if (!wallet) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm dark:border-yellow-800 dark:bg-yellow-950/20">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-600" />
+        <span>Set up a team wallet before authorizing payments.</span>
+      </div>
+    );
+  }
 
-  // Nothing due, nothing blocked, nothing stuck — don't clutter the
-  // Treasury tab with an empty card at all.
-  if (!hasActivity) {
-    return null;
+  if (eligibleBounties.length === 0) {
+    return (
+      <div className="space-y-3 rounded-xl border bg-card p-6 text-center text-muted-foreground">
+        <Coins className="mx-auto h-8 w-8 opacity-40" />
+        <p className="text-sm">No bounties ready for payment</p>
+        {hasMore && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => loadMoreTeamBounties(team.id)}
+            disabled={loadingMore}
+            className="gap-2"
+          >
+            {loadingMore && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {loadingMore ? "Loading…" : "Load more bounties"}
+          </Button>
+        )}
+        {inFlightBounties.length > 0 && (
+          <p className="text-xs text-amber-600">
+            {inFlightBounties.length} payment
+            {inFlightBounties.length > 1 ? "s" : ""} awaiting settlement.
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (
-    <div className="rounded-xl border bg-card p-4 space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold">Payments due</h3>
-        <p className="text-xs text-muted-foreground">
-          {hasEligible
-            ? `${eligibleBounties.length} completed bounty${
-                eligibleBounties.length !== 1 ? "ies" : ""
-              } awaiting payout`
-            : "Nothing ready to pay out right now"}
-        </p>
+    <div className="space-y-4 rounded-xl border bg-card p-5">
+      <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 p-3 text-sm dark:border-green-800 dark:bg-green-950/20">
+        <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />
+        <span>
+          Paying from <span className="font-medium">{wallet.accountName}</span>{" "}
+          ({wallet.chain})
+        </span>
       </div>
 
-      {team.wallet && (
-        <div className="flex items-center gap-2 text-sm p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
-          <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
-          <span>
-            Paying from{" "}
-            <span className="font-medium">{team.wallet.accountName}</span> (
-            {team.wallet.chain})
-          </span>
-        </div>
-      )}
-
       {inFlightBounties.length > 0 && (
-        <div className="flex items-start gap-2.5 text-sm p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+        <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/20">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
           <span className="text-amber-800 dark:text-amber-200">
             <span className="font-medium">
               {inFlightBounties.length} payment
@@ -176,148 +216,179 @@ export function TeamAuthorizePaymentPanel({
             </span>{" "}
             — the wallet didn't confirm the send, so{" "}
             {inFlightBounties.length > 1 ? "they are" : "it is"} locked against
-            retry. Check the wallet history and resolve from the Transactions
-            tab.
+            retry. Check the wallet history before taking further action.
           </span>
         </div>
       )}
 
       {blockedBounties.length > 0 && (
-        <div className="flex items-start gap-2.5 text-sm p-3 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-          <AlertTriangle className="w-4 h-4 text-yellow-600 shrink-0 mt-0.5" />
+        <div className="flex items-start gap-2.5 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm dark:border-yellow-800 dark:bg-yellow-950/20">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-600" />
           <span className="text-yellow-800 dark:text-yellow-200">
             <span className="font-medium">
               {blockedBounties.length} bount
               {blockedBounties.length > 1 ? "ies" : "y"} hidden
             </span>{" "}
             — the team wallet is on{" "}
-            <span className="font-medium">{team.wallet?.chain}</span> but{" "}
+            <span className="font-medium">{wallet.chain}</span> but{" "}
             {blockedBounties.length > 1
               ? "those bounties are"
               : "that bounty is"}{" "}
             on{" "}
             <span className="font-medium">
-              {activeChain === "TEST" ? "mainnet" : "testnet"}
+              {isTestnetWallet ? "mainnet" : "testnet"}
             </span>
-            .
+            . Replace the wallet to pay them.
           </span>
         </div>
       )}
 
-      {hasEligible && (
-        <>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                checked={selectedIds.size === eligibleBounties.length}
-                onCheckedChange={toggleAll}
-                id="team-select-all"
-              />
-              <label
-                htmlFor="team-select-all"
-                className="text-sm font-medium cursor-pointer"
-              >
-                Select all ({eligibleBounties.length})
-              </label>
-            </div>
-            {selectedIds.size > 0 && (
-              <span className="text-sm text-muted-foreground">
-                {selectedIds.size} selected · {totalSelected.toFixed(4)} ZEC
-              </span>
-            )}
-          </div>
-
-          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-            {eligibleBounties.map((bounty) => (
-              <div
-                key={bounty.id}
-                onClick={() => toggleOne(bounty.id)}
-                className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
-                  selectedIds.has(bounty.id)
-                    ? "border-primary bg-primary/5"
-                    : "hover:bg-muted/50"
-                }`}
-              >
-                <Checkbox
-                  checked={selectedIds.has(bounty.id)}
-                  onCheckedChange={() => toggleOne(bounty.id)}
-                  onClick={(e) => e.stopPropagation()}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{bounty.title}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {bounty.assigneeUser?.name ?? "Unknown assignee"}
-                  </p>
-                </div>
-                <span className="text-sm font-mono font-medium shrink-0">
-                  {bounty.bountyAmount.toFixed(4)} ZEC
-                </span>
-              </div>
-            ))}
-          </div>
-
+      {hasMore && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm dark:border-blue-800 dark:bg-blue-950/20">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+          <span className="flex-1 text-blue-800 dark:text-blue-200">
+            More bounties exist than are loaded. "Select all" only selects
+            what's currently loaded.
+          </span>
           <Button
-            onClick={() => setShowConfirm(true)}
-            disabled={selectedIds.size === 0 || isProcessing || !team.wallet}
-            className="w-full"
+            size="sm"
+            variant="outline"
+            onClick={() => loadMoreTeamBounties(team.id)}
+            disabled={loadingMore}
+            className="shrink-0 gap-1.5"
           >
-            {isProcessing
-              ? "Processing..."
-              : `Authorize ${selectedIds.size > 0 ? `${selectedIds.size} Payment${selectedIds.size > 1 ? "s" : ""}` : "Payment"}`}
+            {loadingMore && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Load more
           </Button>
-        </>
+        </div>
       )}
+
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            checked={selectedIds.size === eligibleBounties.length}
+            onCheckedChange={toggleAll}
+            id="team-select-all"
+          />
+          <label
+            htmlFor="team-select-all"
+            className="cursor-pointer text-sm font-medium"
+          >
+            Select all ({eligibleBounties.length})
+          </label>
+        </div>
+        {selectedIds.size > 0 && (
+          <span className="text-sm text-muted-foreground">
+            {selectedIds.size} selected · {totalSelected.toFixed(4)} ZEC
+          </span>
+        )}
+      </div>
+
+      <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+        {eligibleBounties.map((bounty) => {
+          // Testnet wallet pays z_address, mainnet wallet pays UA_address.
+          const hasAddress = isTestnetWallet
+            ? !!bounty.assigneeUser?.z_address
+            : !!bounty.assigneeUser?.UA_address;
+          const label = isTestnetWallet ? "TA" : "UA";
+
+          return (
+            <div
+              key={bounty.id}
+              onClick={() => toggleOne(bounty.id)}
+              className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors ${
+                selectedIds.has(bounty.id)
+                  ? "border-primary bg-primary/5"
+                  : "hover:bg-muted/50"
+              }`}
+            >
+              <Checkbox
+                checked={selectedIds.has(bounty.id)}
+                onCheckedChange={() => toggleOne(bounty.id)}
+                onClick={(e) => e.stopPropagation()}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{bounty.title}</p>
+                <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+                  {bounty.assigneeUser?.name ?? "Unknown assignee"}
+                  {hasAddress ? (
+                    <span className="flex items-center gap-0.5 text-green-600">
+                      <CheckCircle2 className="h-3 w-3" /> {label} set
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-0.5 text-red-600">
+                      <AlertTriangle className="h-3 w-3" /> No {label}
+                    </span>
+                  )}
+                </p>
+              </div>
+              <span className="shrink-0 font-mono text-sm font-medium">
+                {bounty.bountyAmount.toFixed(4)} ZEC
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <Button
+        onClick={() => setShowConfirm(true)}
+        disabled={selectedIds.size === 0 || isProcessing}
+        className="w-full"
+      >
+        {isProcessing
+          ? "Processing..."
+          : `Authorize ${selectedIds.size > 0 ? `${selectedIds.size} Payment${selectedIds.size > 1 ? "s" : ""}` : "Payment"}`}
+      </Button>
 
       <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Team Payment</AlertDialogTitle>
+            <AlertDialogTitle>Confirm Payment</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>
                   You are about to authorize{" "}
                   <span className="font-semibold text-foreground">
-                    {selectedIds.size} payment{selectedIds.size > 1 ? "s" : ""}
+                    {selectedBounties.length} payment
+                    {selectedBounties.length > 1 ? "s" : ""}
                   </span>{" "}
                   totalling{" "}
                   <span className="font-semibold text-foreground">
                     {totalSelected.toFixed(4)} ZEC
                   </span>{" "}
-                  from {team.name}'s wallet{" "}
+                  from the {team.name} wallet{" "}
                   <span className="font-semibold text-foreground">
-                    {team.wallet?.accountName}
+                    {wallet.accountName}
                   </span>{" "}
                   on{" "}
                   <span className="font-semibold text-foreground">
-                    {team.wallet?.chain}
+                    {wallet.chain}
                   </span>
                   .
                 </p>
 
-                <div className="rounded-lg border bg-muted/40 divide-y max-h-48 overflow-y-auto">
-                  {teamBounties
-                    .filter((b) => selectedIds.has(b.id))
-                    .map((b) => (
-                      <div
-                        key={b.id}
-                        className="flex items-center justify-between px-3 py-2 text-sm"
-                      >
-                        <span className="truncate text-foreground font-medium max-w-[60%]">
-                          {b.title}
+                <div className="max-h-48 divide-y overflow-y-auto rounded-lg border bg-muted/40">
+                  {selectedBounties.map((b) => (
+                    <div
+                      key={b.id}
+                      className="flex items-center justify-between px-3 py-2 text-sm"
+                    >
+                      <span className="max-w-[60%] truncate font-medium text-foreground">
+                        {b.title}
+                      </span>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {b.assigneeUser?.name ?? "Unknown"}
                         </span>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xs text-muted-foreground">
-                            {b.assigneeUser?.name ?? "Unknown"}
-                          </span>
-                          <span className="font-mono text-xs font-semibold">
-                            {b.bountyAmount.toFixed(4)} ZEC
-                          </span>
-                        </div>
+                        <span className="font-mono text-xs font-semibold">
+                          {b.bountyAmount.toFixed(4)} ZEC
+                        </span>
                       </div>
-                    ))}
+                    </div>
+                  ))}
                 </div>
 
-                <p className="text-xs text-destructive font-medium">
+                <p className="text-xs font-medium text-destructive">
                   This action cannot be undone.
                 </p>
               </div>
@@ -334,7 +405,7 @@ export function TeamAuthorizePaymentPanel({
             >
               {isProcessing ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Processing...
                 </>
               ) : (

@@ -12,6 +12,7 @@ import type {
   TeamFavorite,
   TeamVerificationStatus,
   SyncStatus,
+  RecoveryData,
 } from "@/lib/types";
 import { getUserRole } from "../page";
 import { TeamsNewBountyModal } from "@/components/teams/new-bounty-modal";
@@ -27,7 +28,19 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Loader2, Plus, UserPlus, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Loader2,
+  Plus,
+  UserPlus,
+  X,
+  Copy,
+  KeyRound,
+  Lock,
+  Hash,
+  Layers,
+  Fingerprint,
+} from "lucide-react";
 import { confirmedTotal, fmt } from "@/lib/utils";
 import { TeamBanner } from "@/components/teams/team-banner";
 import {
@@ -201,6 +214,226 @@ function VerificationStatusBanner({ teamId }: { teamId: string }) {
       admins have signed off. Bounties can't be posted until verification is
       complete.
     </div>
+  );
+}
+
+function TeamSensitiveField({
+  label,
+  value,
+  icon: Icon,
+  warning,
+}: {
+  label: string;
+  value: string;
+  icon: React.ComponentType<{ className?: string }>;
+  warning: string;
+}) {
+  const [show, setShow] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="overflow-hidden rounded-lg border bg-card">
+      <div className="flex items-center justify-between border-b bg-muted/40 px-3.5 py-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Icon className="h-3 w-3 shrink-0 text-muted-foreground" />
+          <span className="truncate text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            {label}
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={copy}
+            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+          >
+            {copied ? (
+              <>
+                <CheckCircle2 className="h-3 w-3 text-emerald-500" /> Copied
+              </>
+            ) : (
+              <>
+                <Copy className="h-3 w-3" /> Copy
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShow((v) => !v)}
+            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+          >
+            {show ? (
+              <>
+                <EyeOff className="h-3 w-3" /> Hide
+              </>
+            ) : (
+              <>
+                <Eye className="h-3 w-3" /> Reveal
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+      <div className="space-y-1.5 px-3.5 py-3">
+        {show ? (
+          <p className="select-all break-all font-mono text-xs leading-relaxed">
+            {value}
+          </p>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap gap-0.5">
+              {Array.from({ length: 28 }).map((_, i) => (
+                <span
+                  key={i}
+                  className="h-1.5 w-1.5 rounded-full bg-muted-foreground/25"
+                />
+              ))}
+            </div>
+            <Lock className="ml-1 h-3 w-3 text-muted-foreground/30" />
+          </div>
+        )}
+        <p className="text-[11px] text-muted-foreground">{warning}</p>
+      </div>
+    </div>
+  );
+}
+
+function TeamRecoveryPanel({ team }: { team: Team }) {
+  const { fetchTeamRecovery } = useBounty();
+  const [data, setData] = useState<RecoveryData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleLoad = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await fetchTeamRecovery(team.id));
+    } catch (err: any) {
+      setError(err.message ?? "Failed to load recovery info");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLock = () => {
+    setData(null);
+    setError(null);
+  };
+
+  return (
+    <section className="space-y-4 rounded-xl border bg-card p-5">
+      <div>
+        <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+          Wallet recovery
+        </h3>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          Seed phrase and viewing keys for {team.wallet?.accountName}. Store
+          offline — never share.
+        </p>
+      </div>
+
+      {!data ? (
+        <div className="space-y-2">
+          <Button size="sm" onClick={handleLoad} disabled={loading}>
+            {loading ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <KeyRound className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            Show recovery info
+          </Button>
+          {error && (
+            <p className="flex items-center gap-1 text-xs text-destructive">
+              <AlertCircle className="h-3 w-3" />
+              {error}
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              {
+                icon: Clock,
+                label: "Birthday",
+                value: data.birthday?.toLocaleString() ?? "—",
+              },
+              {
+                icon: Hash,
+                label: "Account",
+                value: `#${data.accountIndex ?? 0}`,
+              },
+              {
+                icon: Layers,
+                label: "No of Accounts",
+                value: String(data.no_of_accounts ?? 1),
+              },
+            ].map(({ icon: I, label, value }) => (
+              <div
+                key={label}
+                className="rounded-lg border bg-muted/60 px-3 py-2.5"
+              >
+                <div className="mb-1 flex items-center gap-1">
+                  <I className="h-3 w-3 opacity-60" />
+                  <span className="text-[9px] font-bold uppercase tracking-widest opacity-70">
+                    {label}
+                  </span>
+                </div>
+                <span className="font-mono text-sm font-bold">{value}</span>
+              </div>
+            ))}
+          </div>
+
+          {data["seed phrase"] ? (
+            <TeamSensitiveField
+              label="Seed phrase"
+              value={data["seed phrase"]}
+              icon={KeyRound}
+              warning="Full control over the team's funds. Never share."
+            />
+          ) : (
+            <p className="rounded-lg border border-dashed px-4 py-3 text-xs text-muted-foreground">
+              Seed phrase not returned by server (may be stored externally).
+            </p>
+          )}
+
+          {data.ufvk && (
+            <TeamSensitiveField
+              label="Unified Full Viewing Key (UFVK)"
+              value={data.ufvk}
+              icon={Eye}
+              warning="Grants read access to all transaction history."
+            />
+          )}
+
+          {data.uivk && (
+            <TeamSensitiveField
+              label="Unified Incoming Viewing Key (UIVK)"
+              value={data.uivk}
+              icon={Fingerprint}
+              warning="Grants access to incoming transactions only."
+            />
+          )}
+
+          <div className="flex justify-end border-t pt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-muted-foreground"
+              onClick={handleLock}
+            >
+              <Lock className="mr-1 h-3 w-3" /> Lock
+            </Button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -2988,6 +3221,9 @@ function SettingsTab({
           )}
         </section>
       )}
+
+      {/* ── Wallet recovery ── */}
+      {canManage && team.wallet && <TeamRecoveryPanel team={team} />}
 
       {/* ── Visibility ── */}
       <section className="rounded-xl border bg-card p-5">

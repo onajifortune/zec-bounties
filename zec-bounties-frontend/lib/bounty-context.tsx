@@ -403,6 +403,7 @@ interface BountyContextType {
   teamSyncStatusLoading: boolean;
   teamSyncStatusError: string | null;
   fetchTeamSyncStatus: (teamId: string) => Promise<void>;
+  fetchTeamRecovery: (teamId: string) => Promise<RecoveryData>;
   convertUserToHunter: (
     userId: string,
   ) => Promise<{ success: boolean; deletedTeamIds: string[] }>;
@@ -1516,8 +1517,9 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     setTeamBountiesLoading((prev) => ({ ...prev, [teamId]: true }));
     try {
       const page = reset ? 1 : (teamBountiesPageRef.current[teamId] ?? 1);
-      const resolvedChain =
-        opts?.chain ?? (currentUser?.role === "ADMIN" ? "ALL" : "MAIN");
+      // Backend downgrades ALL to MAIN for non-members, so it's safe to
+      // always ask for it here.
+      const resolvedChain = opts?.chain ?? "ALL";
 
       const params = new URLSearchParams({
         page: String(page),
@@ -2861,7 +2863,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
 
       setHasMoreBounties(
         incoming.length === BOUNTIES_PER_PAGE &&
-          bounties.length + incoming.length < total,
+          page * BOUNTIES_PER_PAGE < total,
       );
     } catch (error) {
       console.error("Failed to fetch bounties:", error);
@@ -3177,6 +3179,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         setBounties((prev) =>
           prev.map((bounty) => (bounty.id === id ? fresh : bounty)),
         );
+        patchTeamBounty(fresh);
       }
     } catch (error) {
       console.error("Failed to update bounty:", error);
@@ -3801,6 +3804,19 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const fetchTeamRecovery = async (teamId: string): Promise<RecoveryData> => {
+    if (!currentUser) throw new Error("Unauthorized");
+    const res = await fetch(
+      `${backendUrl}/api/teams/${teamId}/wallet/recovery`,
+      {
+        headers: getAuthHeaders(),
+      },
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || "Failed to fetch recovery info");
+    return json.data;
+  };
+
   const convertUserRole = async (
     userId: string,
     toRole: "HUNTER" | "TEAM" | "ADMIN",
@@ -4046,6 +4062,7 @@ export function BountyProvider({ children }: { children: React.ReactNode }) {
         teamSyncStatusLoading,
         teamSyncStatusError,
         fetchTeamSyncStatus,
+        fetchTeamRecovery,
         convertUserToHunter,
         convertUserRole,
         authorizeTeamDuePayment,
